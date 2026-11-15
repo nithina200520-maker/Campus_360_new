@@ -1,0 +1,194 @@
+{% extends "base.html" %}
+
+{% block title %}Report Lost or Found Item{% endblock %}
+
+{% block extra_head %}
+<style>
+  /* ===== Neon smart-city re-theme for the Report Item page (colors only, data unchanged) ===== */
+  body.lostfound-scene {
+    background:
+      radial-gradient(900px 500px at 88% 4%, rgba(255, 61, 104, 0.18), transparent 60%),
+      radial-gradient(820px 620px at 8% 110%, rgba(79, 70, 229, 0.30), transparent 60%),
+      linear-gradient(160deg, #12142a 0%, #1a1d3a 45%, #0f1128 100%) fixed;
+  }
+  body.lostfound-scene main { color: #e7ebff; }
+  body.lostfound-scene .text-dark { color: #ffffff !important; }
+  body.lostfound-scene .text-muted, body.lostfound-scene .form-text { color: rgba(210, 216, 245, 0.72) !important; }
+  body.lostfound-scene .text-secondary { color: rgba(214, 220, 255, 0.85) !important; }
+
+  /* Glass card with shining gradient border */
+  body.lostfound-scene .campus-card {
+    position: relative;
+    background: rgba(18, 20, 42, 0.82);
+    border: 1px solid transparent;
+    border-radius: 20px;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    box-shadow: 0 24px 60px -20px rgba(0, 0, 0, 0.7), 0 0 22px rgba(123, 92, 255, 0.2);
+    overflow: visible;
+  }
+  body.lostfound-scene .campus-card:hover { transform: none; }
+  body.lostfound-scene .campus-card::before {
+    content: "";
+    position: absolute; inset: 0; border-radius: 20px; padding: 2px;
+    background: linear-gradient(120deg, #4facfe, #7b5cff, #ff3d68, #43e9d6, #4facfe);
+    background-size: 300% 300%;
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor; mask-composite: exclude;
+    animation: lfShine 7s linear infinite;
+    pointer-events: none; /* keep all fields clickable */
+  }
+  @keyframes lfShine {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+  }
+
+  /* Header icon + AI banner */
+  body.lostfound-scene .bg-success { background: linear-gradient(90deg, #4facfe, #7b5cff) !important; }
+  body.lostfound-scene .alert-success {
+    background: rgba(67, 233, 214, 0.12);
+    border: 1px solid rgba(67, 233, 214, 0.4);
+    color: #c8f5ef;
+  }
+  body.lostfound-scene .alert-success .text-success { color: #43e9d6 !important; }
+  body.lostfound-scene .alert-success strong { color: #ffffff; }
+
+  /* Inputs & selects */
+  body.lostfound-scene .form-control,
+  body.lostfound-scene .form-select {
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(140, 150, 220, 0.35);
+    color: #ffffff;
+  }
+  body.lostfound-scene .form-control::placeholder { color: rgba(200, 205, 240, 0.5); }
+  body.lostfound-scene .form-control:focus,
+  body.lostfound-scene .form-select:focus {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: #7b5cff;
+    color: #ffffff;
+    box-shadow: 0 0 0 0.2rem rgba(123, 92, 255, 0.25), 0 0 16px rgba(79, 172, 254, 0.3);
+  }
+  body.lostfound-scene .form-select option { background: #1a1d3a; color: #ffffff; }
+  body.lostfound-scene .form-control[type="file"] { color: #dbe2ff; }
+  body.lostfound-scene .form-control[type="file"]::file-selector-button {
+    background: rgba(123, 92, 255, 0.25);
+    border: 1px solid rgba(123, 92, 255, 0.5);
+    color: #ffffff;
+    border-radius: 8px;
+    margin-right: 12px;
+  }
+
+  /* Buttons */
+  body.lostfound-scene .btn-success {
+    background: linear-gradient(90deg, #4facfe 0%, #7b5cff 55%, #a24bff 100%);
+    border: none;
+    color: #ffffff;
+    box-shadow: 0 8px 24px -6px rgba(123, 92, 255, 0.7), 0 0 18px rgba(79, 172, 254, 0.4);
+    transition: all 0.2s ease;
+  }
+  body.lostfound-scene .btn-success:hover {
+    color: #ffffff;
+    transform: translateY(-2px);
+    box-shadow: 0 12px 30px -6px rgba(123, 92, 255, 0.85), 0 0 26px rgba(79, 172, 254, 0.6);
+  }
+  body.lostfound-scene .btn-outline-secondary { color: #dbe2ff; border-color: rgba(140, 150, 220, 0.5); }
+  body.lostfound-scene .btn-outline-secondary:hover { background: rgba(123, 92, 255, 0.22); color: #fff; border-color: #7b5cff; }
+  body.lostfound-scene .text-danger { color: #ff6b85 !important; }
+  body.lostfound-scene .border-top { border-color: rgba(140, 150, 220, 0.3) !important; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+  <div class="row justify-content-center">
+    <div class="col-lg-8">
+      
+      <div class="card campus-card border-0 shadow-lg p-4 p-md-5">
+        
+        <div class="d-flex align-items-center gap-3 mb-4">
+          <div class="bg-success text-white p-3 rounded-circle">
+            <i class="fa-solid fa-bullhorn fa-2x"></i>
+          </div>
+          <div>
+            <h3 class="fw-bold text-dark mb-0">Report Campus Item</h3>
+            <p class="text-muted small mb-0">Upload details and a clear photograph so the campus community can identify the item</p>
+          </div>
+        </div>
+
+        <!-- How the reunification flow works -->
+        <div class="alert alert-success d-flex align-items-center rounded-3 mb-4" role="alert">
+          <i class="fa-solid fa-people-group fa-2x text-success me-3"></i>
+          <div class="small">
+            <strong>How it works:</strong> a <strong>Lost</strong> report is sent to every registered campus member immediately. If you have <strong>found</strong> someone's item, open that lost report and use <strong>"I found this"</strong> to notify the owner directly with your contact details. Your name and contact are shown publicly so owners and finders can coordinate the return &mdash; no guesswork, no waiting.
+          </div>
+        </div>
+
+        <form method="POST" action="{{ url_for('lost_found.report_item') }}" enctype="multipart/form-data">
+          
+          <div class="row g-3 mb-3">
+            <div class="col-md-6">
+              <label class="form-label fw-bold small text-secondary">Report Type <span class="text-danger">*</span></label>
+              <select name="report_type" class="form-select" required>
+                <option value="lost">I LOST an item</option>
+                <option value="found">I FOUND an item</option>
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-bold small text-secondary">Category <span class="text-danger">*</span></label>
+              <select name="category" class="form-select" required>
+                {% for c in categories %}
+                  <option value="{{ c }}">{{ c }}</option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label fw-bold small text-secondary">Item Title / Headline <span class="text-danger">*</span></label>
+            <input type="text" name="title" class="form-control" placeholder="e.g. Blue Stainless Steel Flask / Casio Scientific Calculator" required>
+          </div>
+
+          <div class="row g-3 mb-3">
+            <div class="col-md-6">
+              <label class="form-label fw-bold small text-secondary">Campus Location <span class="text-danger">*</span></label>
+              <input type="text" name="location_reported" class="form-control" placeholder="e.g. CSE Lab 2 / Canteen Terrace / Central Library" required>
+            </div>
+            <div class="col-md-3">
+              <label class="form-label fw-bold small text-secondary">Dominant Colour</label>
+              <input type="text" name="color_hint" class="form-control" placeholder="e.g. Black">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label fw-bold small text-secondary">Contact Phone</label>
+              <input type="text" name="contact_phone" class="form-control" value="{{ user.phone or '' }}" placeholder="+91 98450 XXXXX">
+            </div>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label fw-bold small text-secondary">Item Description & Identifiers <span class="text-danger">*</span></label>
+            <textarea name="description" rows="3" class="form-control" placeholder="Mention color, brand, scratches, USN stickers, keychains, or unique marks..." required></textarea>
+          </div>
+
+          <div class="mb-4">
+            <label class="form-label fw-bold small text-secondary">Item Photograph (JPG / PNG / WEBP, max 8 MB)</label>
+            <input type="file" name="photo" class="form-control" accept="image/png,image/jpeg,image/webp">
+            <div class="form-text small">Uploads are content-validated (true image bytes only) and stored securely. Your name and contact number are shown publicly so a finder can reach you directly to return your item.</div>
+          </div>
+
+          <div class="d-flex justify-content-between align-items-center pt-3 border-top">
+            <a href="{{ url_for('lost_found.index') }}" class="btn btn-outline-secondary rounded-pill px-4">Cancel</a>
+            <button type="submit" class="btn btn-success btn-lg rounded-pill px-5 fw-bold shadow-sm">
+              <i class="fa-solid fa-paper-plane me-1"></i> Submit Report
+            </button>
+          </div>
+
+        </form>
+
+      </div>
+
+    </div>
+  </div>
+</div>
+<script>document.body.classList.add('lostfound-scene');</script>
+{% endblock %}

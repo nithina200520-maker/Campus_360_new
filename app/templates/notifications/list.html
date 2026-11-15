@@ -1,0 +1,282 @@
+{% extends "base.html" %}
+
+{% block title %}My Notifications{% endblock %}
+
+{% block extra_head %}
+<style>
+  /* Swipe-to-delete rows: a red Delete action is revealed by dragging a row left */
+  .notif-swipe {
+    position: relative;
+    overflow: hidden;
+    border-radius: .5rem;
+    background: #fff;
+    touch-action: pan-y;          /* horizontal drags belong to us, vertical to the page */
+  }
+  .notif-swipe .notif-delete-reveal {
+    position: absolute;
+    top: 0; right: 0; bottom: 0;
+    width: 120px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: .4rem;
+    color: #fff;
+    font-weight: 700;
+    font-size: .85rem;
+    background: linear-gradient(90deg, #dc3545, #b02a37);
+    opacity: 0;
+    transition: opacity .18s ease;
+    user-select: none;
+    cursor: pointer;
+  }
+  .notif-swipe.swiping .notif-delete-reveal { opacity: 1; transition: none; }
+  .notif-swipe .notif-content {
+    position: relative;
+    background: inherit;
+    background-color: #fff;
+    will-change: transform;
+  }
+  .notif-swipe.unread .notif-content { background-color: #f8f9fa; }
+  .notif-swipe:not(.animating) .notif-content { transition: transform .22s ease-out; }
+  .notif-swipe.animating .notif-content { transition: none; }
+  .notif-swipe.removing .notif-content {
+    transform: translateX(-110%) !important;
+    opacity: 0;
+    transition: transform .26s ease-in, opacity .26s ease-in;
+  }
+  .notif-hint { font-size: .72rem; color: #94a3b8; }
+  @media (hover: none) and (pointer: coarse) { .notif-hint { display: none; } }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container py-4" style="max-width: 860px;">
+
+  <div class="d-flex flex-wrap justify-content-between align-items-center mb-4">
+    <div>
+      <span class="badge bg-primary px-3 py-1 rounded-pill mb-1">
+        <i class="fa-regular fa-bell me-1"></i> Phase 4 &bull; In-App Notifications
+      </span>
+      <h2 class="fw-bold text-dark mb-0">Notification History</h2>
+      <p class="text-muted small mb-0">
+        Alerts are grouped by campus section so <strong>Lost &amp; Found</strong> and <strong>Smart Canteen</strong> updates never get mixed together.
+        {% if unread_notifications %}<span class="badge bg-danger rounded-pill ms-1" id="notifUnreadBadge">{{ unread_notifications }} unread here</span>{% endif %}
+      </p>
+      <p class="notif-hint mb-0 mt-1"><i class="fa-solid fa-hand-pointer me-1"></i>Drag an alert to the left to delete it.</p>
+    </div>
+    <div class="d-flex gap-2 mt-2 mt-md-0">
+      <a href="{{ url_for('notifications.index', unread='1') }}" class="btn btn-sm btn-outline-primary rounded-pill {% if only_unread %}active fw-bold{% endif %}">
+        <i class="fa-regular fa-envelope me-1"></i> {% if only_unread %}Showing unread{% else %}Unread only{% endif %}
+      </a>
+      {% if unread_notifications %}
+      <form method="POST" action="{{ url_for('notifications.mark_all_read') }}" class="d-inline">
+        <button class="btn btn-sm btn-primary rounded-pill fw-bold">
+          <i class="fa-solid fa-check-double me-1"></i> Mark all read
+        </button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+
+  {# Module tabs: keep each section's alerts separate #}
+  {% set qs = {'unread': '1'} if only_unread else {} %}
+  <div class="d-flex flex-wrap gap-2 mb-4">
+    <a href="{{ url_for('notifications.index', **qs) }}" class="btn btn-sm rounded-pill {% if not current_module %}btn-dark{% else %}btn-outline-secondary{% endif %} fw-bold">
+      <i class="fa-solid fa-inbox me-1"></i> All
+    </a>
+    <a href="{{ url_for('notifications.index', module='lost_found', **qs) }}" class="btn btn-sm rounded-pill {% if current_module == 'lost_found' %}btn-success{% else %}btn-outline-success{% endif %} fw-bold">
+      <i class="fa-solid fa-boxes-stacked me-1"></i> Lost &amp; Found
+    </a>
+    <a href="{{ url_for('notifications.index', module='canteen', **qs) }}" class="btn btn-sm rounded-pill {% if current_module == 'canteen' %}btn-warning text-dark{% else %}btn-outline-warning{% endif %} fw-bold">
+      <i class="fa-solid fa-utensils me-1"></i> Smart Canteen
+    </a>
+    <a href="{{ url_for('notifications.index', module='exam', **qs) }}" class="btn btn-sm rounded-pill {% if current_module == 'exam' %}btn-primary{% else %}btn-outline-primary{% endif %} fw-bold">
+      <i class="fa-solid fa-door-open me-1"></i> Exam Room Finder
+    </a>
+    <a href="{{ url_for('notifications.index', module='other', **qs) }}" class="btn btn-sm rounded-pill {% if current_module == 'other' %}btn-secondary{% else %}btn-outline-secondary{% endif %} fw-bold">
+      <i class="fa-solid fa-circle-info me-1"></i> Other
+    </a>
+  </div>
+
+  {% if notifications %}
+  <div class="list-group shadow-sm" id="notifList">
+    {% for note in notifications %}
+    <div class="list-group-item border-0 border-bottom p-0 notif-swipe {% if not note.is_read %}unread{% endif %}"
+         data-note-id="{{ note.id }}" data-unread="{{ '1' if not note.is_read else '0' }}">
+      <div class="notif-delete-reveal" aria-hidden="true">
+        <i class="fa-solid fa-trash-can"></i> Delete
+      </div>
+      <div class="notif-content d-flex justify-content-between align-items-start py-3 px-3">
+        <div class="me-3 flex-grow-1">
+          <div class="d-flex align-items-center gap-2 mb-1">
+            <span class="badge {% if note.category == 'found' %}bg-danger{% elif note.category == 'match' %}bg-success{% elif note.category == 'claim' %}bg-warning text-dark{% elif note.category == 'return' %}bg-primary{% elif note.category == 'canteen' %}bg-info text-dark{% elif note.category == 'exam' %}bg-primary{% elif note.category == 'admin' %}bg-danger{% else %}bg-secondary{% endif %} text-uppercase" style="font-size: 0.65rem;">
+              {{ note.category }}
+            </span>
+            <a href="{{ note.link_url or url_for('notifications.index') }}" class="fw-bold text-dark text-decoration-none notif-title">
+              {{ note.title }}
+            </a>
+            {% if not note.is_read %}<span class="dot bg-danger rounded-circle" style="width: 8px; height: 8px; display: inline-block;"></span>{% endif %}
+          </div>
+          <p class="mb-1 small text-secondary">{{ note.message }}</p>
+          <span class="text-muted" style="font-size: 0.72rem;">
+            <i class="fa-regular fa-clock me-1"></i>{{ note.created_at|ist if note.created_at else '' }}
+          </span>
+        </div>
+        {% if not note.is_read %}
+        <form method="POST" action="{{ url_for('notifications.mark_read', note_id=note.id) }}" class="position-relative" style="z-index: 20;">
+          <button class="btn btn-sm btn-outline-secondary rounded-pill text-nowrap" title="Mark as read">
+            <i class="fa-solid fa-check"></i>
+          </button>
+        </form>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="text-center py-5 bg-white rounded-4 border">
+    <i class="fa-regular fa-bell-slash fa-3x text-muted mb-3 d-block"></i>
+    <h5 class="fw-bold text-dark">Nothing here yet.</h5>
+    <p class="text-muted small">
+      {% if only_unread %}You have no unread notifications.{% else %}When a possible match or claim involves one of your reports, it will appear here.{% endif %}
+    </p>
+    <a href="{{ url_for('lost_found.index') }}" class="btn btn-success rounded-pill px-4">Open Lost &amp; Found Registry</a>
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+  // Swipe-to-delete: dragging a row left reveals a red Delete action.
+  // Releasing past the threshold (or tapping the revealed action) deletes that alert.
+  (function () {
+    const REVEAL_W = 120;   // must match .notif-delete-reveal width
+    const THRESHOLD = 78;   // drag distance that commits to deletion
+    const list = document.getElementById('notifList');
+    if (!list) return;
+
+    let active = null;      // row currently being dragged
+    let startX = 0, startY = 0, dx = 0, locked = null; // 'h' horizontal | 'v' vertical
+
+    const contentOf = (row) => row.querySelector('.notif-content');
+
+    function resetRow(row) {
+      row.classList.remove('swiping', 'animating');
+      contentOf(row).style.transform = '';
+      row.querySelector('.notif-delete-reveal').style.opacity = '';
+    }
+
+    function findRow(node) {
+      return node && node.closest ? node.closest('.notif-swipe') : null;
+    }
+
+    list.addEventListener('pointerdown', (e) => {
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      const row = findRow(e.target);
+      if (!row || row.classList.contains('removing')) return;
+      if (e.target.closest('form,button,a')) {   // let real controls work
+        if (!e.target.closest('.notif-delete-reveal')) return;
+      }
+      active = row;
+      startX = e.clientX; startY = e.clientY; dx = 0; locked = null;
+      row.classList.add('animating');
+    });
+
+    list.addEventListener('pointermove', (e) => {
+      if (!active) return;
+      const mx = e.clientX - startX;
+      const my = e.clientY - startY;
+      if (!locked) {
+        if (Math.abs(mx) < 6 && Math.abs(my) < 6) return;
+        locked = Math.abs(mx) > Math.abs(my) ? 'h' : 'v';
+        if (locked === 'v') { resetRow(active); active = null; return; }
+        active.classList.add('swiping');
+      }
+      dx = Math.min(0, Math.max(-REVEAL_W, mx));   // left only, clamped
+      contentOf(active).style.transform = `translateX(${dx}px)`;
+      active.querySelector('.notif-delete-reveal').style.opacity = Math.min(-dx / REVEAL_W, 1);
+    });
+
+    function endDrag(e) {
+      if (!active) return;
+      const row = active;
+      active = null;
+      if (row.classList.contains('swiping') && dx <= -THRESHOLD) { deleteRow(row); return; }
+      resetRow(row);
+    }
+    list.addEventListener('pointerup', endDrag);
+    list.addEventListener('pointercancel', endDrag);
+
+    // Tapping the revealed red Delete action also commits the deletion
+    list.addEventListener('click', (e) => {
+      const reveal = e.target.closest('.notif-delete-reveal');
+      if (!reveal) return;
+      e.preventDefault(); e.stopPropagation();
+      deleteRow(reveal.closest('.notif-swipe'));
+    }, true);
+
+    // Block the title link from navigating at the end of a horizontal drag
+    list.addEventListener('click', (e) => {
+      const link = e.target.closest('a');
+      if (link && dx <= -THRESHOLD) { e.preventDefault(); }
+    }, true);
+
+    function deleteRow(row) {
+      if (!row || row.dataset.deleting) return;
+      row.dataset.deleting = '1';
+      row.classList.remove('swiping');
+      row.classList.add('animating');
+      const id = row.dataset.noteId;
+      const wasUnread = row.dataset.unread === '1';
+
+      row.classList.add('removing');
+      contentOf(row).style.transform = `translateX(-${REVEAL_W + 40}px)`;
+
+      fetch("{{ url_for('notifications.delete_note', note_id=0) }}".replace(/0\/?$/, id), {
+        method: 'POST',
+        headers: { 'Accept': 'application/json' },
+        credentials: 'same-origin'
+      })
+        .then((r) => { if (!r.ok) throw new Error('delete failed'); return r.json(); })
+        .then(() => collapse(row, wasUnread))
+        .catch(() => { delete row.dataset.deleting; resetRow(row); });
+    }
+
+    function collapse(row, wasUnread) {
+      row.style.transition = 'height .22s ease, margin .22s ease, padding .22s ease';
+      row.style.height = row.offsetHeight + 'px';
+      requestAnimationFrame(() => {
+        row.style.height = '0px';
+        row.style.padding = '0';
+        row.style.margin = '0';
+        row.style.borderWidth = '0';
+        row.style.overflow = 'hidden';
+      });
+      setTimeout(() => {
+        row.remove();
+        if (wasUnread) bumpUnreadBadge();
+        if (!list.querySelector('.notif-swipe')) showEmptyState();
+      }, 240);
+    }
+
+    function bumpUnreadBadge() {
+      const badge = document.getElementById('notifUnreadBadge');
+      if (!badge) return;
+      const remaining = list.querySelectorAll('.notif-swipe.unread').length;
+      if (remaining === 0) { badge.remove(); return; }
+      badge.textContent = remaining + ' unread here';
+    }
+
+    function showEmptyState() {
+      const wrap = document.createElement('div');
+      wrap.className = 'text-center py-5 bg-white rounded-4 border';
+      wrap.innerHTML = '<i class="fa-regular fa-bell-slash fa-3x text-muted mb-3 d-block"></i>' +
+        '<h5 class="fw-bold text-dark mb-1">All clear.</h5>' +
+        '<p class="text-muted small mb-0">You have deleted every alert in this section.</p>';
+      list.replaceWith(wrap);
+    }
+  })();
+</script>
+{% endblock %}

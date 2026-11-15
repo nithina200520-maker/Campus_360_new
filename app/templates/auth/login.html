@@ -1,0 +1,932 @@
+{% extends "base.html" %}
+
+{% block title %}{% if active_tab == 'register' %}Register Account{% else %}Sign In{% endif %}{% endblock %}
+
+{% block extra_head %}
+<style>
+  /* Smart Campus 360 login — navy + neon-cyan theme (matches the dashboard).
+     Every rule is scoped to body.login-scene or login-only classes, so no other page is affected. */
+  body.login-scene {
+    --navy-950: #050a1c;
+    --navy-900: #070d24;
+    --navy-800: #0a1430;
+    --cyan: #22d3ee;
+    --cyan-bright: #67f2ff;
+    --blue: #3b82f6;
+    --blue-electric: #4facfe;
+    --ink: #ffffff;
+    --ink-dim: rgba(191, 214, 255, 0.78);
+    --line: rgba(72, 150, 235, 0.30);
+    --panel: rgba(9, 18, 42, 0.72);
+    background:
+      radial-gradient(1100px 620px at 82% -6%, rgba(34, 211, 238, 0.16), transparent 60%),
+      radial-gradient(900px 600px at 8% 12%, rgba(59, 130, 246, 0.16), transparent 55%),
+      radial-gradient(1000px 720px at 50% 118%, rgba(20, 60, 140, 0.35), transparent 60%),
+      linear-gradient(160deg, #050a1c 0%, #0a1430 46%, #060c22 100%) fixed;
+  }
+
+  body.login-scene .college-header,
+  body.login-scene nav.navbar,
+  body.login-scene footer {
+    display: none;
+  }
+
+  body.login-scene main {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+  }
+
+  /* Decorative neon layers */
+  .scene-decor {
+    position: fixed;
+    inset: 0;
+    overflow: hidden;
+    pointer-events: none;
+    z-index: 0;
+  }
+  /* Faint geometric grid, masked toward the centre */
+  .scene-decor .grid-overlay {
+    position: absolute; inset: 0;
+    background-image:
+      linear-gradient(rgba(70, 150, 235, 0.06) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(70, 150, 235, 0.06) 1px, transparent 1px);
+    background-size: 46px 46px;
+    -webkit-mask: radial-gradient(circle at 50% 40%, #000 0%, transparent 78%);
+            mask: radial-gradient(circle at 50% 40%, #000 0%, transparent 78%);
+  }
+  /* Occasional soft cyan light sweep */
+  .scene-decor .sweep {
+    position: absolute; top: -20%; left: -45%;
+    width: 45%; height: 160%;
+    background: linear-gradient(100deg, transparent, rgba(103, 242, 255, 0.10), transparent);
+    transform: rotate(12deg);
+    filter: blur(6px);
+    animation: sweepMove 12s ease-in-out infinite;
+  }
+  @keyframes sweepMove {
+    0% { left: -45%; opacity: 0; }
+    35% { opacity: 1; }
+    100% { left: 120%; opacity: 0; }
+  }
+  /* Slowly rising glowing cyan particles */
+  .scene-decor .pt {
+    position: absolute;
+    bottom: -10px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 40% 40%, #d7fbff, #22d3ee 55%, rgba(34,211,238,0));
+    box-shadow: 0 0 10px 2px rgba(34, 211, 238, 0.55);
+    opacity: 0;
+    animation: ptFloat linear infinite;
+  }
+  @keyframes ptFloat {
+    0% { transform: translateY(0) translateX(0); opacity: 0; }
+    10% { opacity: 0.9; }
+    90% { opacity: 0.7; }
+    100% { transform: translateY(-105vh) translateX(24px); opacity: 0; }
+  }
+  .scene-decor .pt.p1 { left: 8%;  width: 6px; height: 6px; animation-duration: 15s; animation-delay: 0s; }
+  .scene-decor .pt.p2 { left: 20%; width: 4px; height: 4px; animation-duration: 19s; animation-delay: 3s; }
+  .scene-decor .pt.p3 { left: 33%; width: 7px; height: 7px; animation-duration: 17s; animation-delay: 6s; }
+  .scene-decor .pt.p4 { left: 47%; width: 3px; height: 3px; animation-duration: 21s; animation-delay: 1.5s; }
+  .scene-decor .pt.p5 { left: 61%; width: 5px; height: 5px; animation-duration: 16s; animation-delay: 4.5s; }
+  .scene-decor .pt.p6 { left: 73%; width: 4px; height: 4px; animation-duration: 20s; animation-delay: 2s; }
+  .scene-decor .pt.p7 { left: 85%; width: 7px; height: 7px; animation-duration: 18s; animation-delay: 7s; }
+  .scene-decor .pt.p8 { left: 93%; width: 3px; height: 3px; animation-duration: 22s; animation-delay: 5s; }
+
+  /* Wireframe building silhouettes (cyan) */
+  .scene-decor svg.wire {
+    position: absolute;
+    bottom: -6px;
+    width: 320px;
+    height: 240px;
+    opacity: 0.4;
+  }
+  .scene-decor svg.wire.left { left: -20px; }
+  .scene-decor svg.wire.right { right: -20px; transform: scaleX(-1); }
+
+  /* Glassmorphism card with animated cyan border + blue glow */
+  body.login-scene .login-card {
+    position: relative;
+    z-index: 5;
+    background: var(--panel);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border-radius: 20px;
+    color: var(--ink);
+    padding: 2px;
+    transition: box-shadow 0.3s ease;
+    box-shadow: 0 18px 50px -20px rgba(0, 0, 0, 0.7), 0 0 8px rgba(125, 211, 252, 0.9), 0 0 22px rgba(56, 189, 248, 0.7), 0 0 48px rgba(37, 99, 235, 0.55), 0 0 92px rgba(34, 211, 238, 0.4);
+    animation: cardEntrance 0.7s cubic-bezier(0.22, 1, 0.36, 1) both,
+               cardFloat 7s ease-in-out 0.8s infinite;
+  }
+  @keyframes cardEntrance {
+    0% { opacity: 0; transform: translateY(26px) scale(0.98); }
+    100% { opacity: 1; transform: translateY(0) scale(1); }
+  }
+  @keyframes cardFloat {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-6px); }
+  }
+
+  /* The moving cyan-blue border with a bright snowy white shimmer core */
+  body.login-scene .login-card::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: 20px;
+    padding: 2.4px;
+    background: linear-gradient(120deg, #38bdf8, #60a5fa, #22d3ee, #7dd3fc, #38bdf8);
+    background-size: 300% 300%;
+    -webkit-mask:
+      linear-gradient(#fff 0 0) content-box,
+      linear-gradient(#fff 0 0);
+    mask:
+      linear-gradient(#fff 0 0) content-box,
+      linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+            mask-composite: exclude;
+    animation: shineBorder 5s linear infinite, glowPulse 3s ease-in-out infinite;
+    pointer-events: none;
+  }
+  @keyframes shineBorder {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+  }
+  @keyframes glowPulse {
+    0%, 100% { box-shadow: 0 0 10px rgba(125, 211, 252, 0.8), 0 0 26px rgba(56, 189, 248, 0.55); }
+    50% { box-shadow: 0 0 16px rgba(186, 230, 253, 0.95), 0 0 42px rgba(56, 189, 248, 0.8), 0 0 66px rgba(34, 211, 238, 0.5); }
+  }
+  /* Hover: calm lift in glow + faster border travel (no flashing/shaking) */
+  body.login-scene .login-card:hover {
+    box-shadow: 0 22px 60px -20px rgba(0, 0, 0, 0.75), 0 0 12px rgba(186, 230, 253, 0.95), 0 0 30px rgba(56, 189, 248, 0.8), 0 0 64px rgba(37, 99, 235, 0.7), 0 0 110px rgba(34, 211, 238, 0.5);
+  }
+  body.login-scene .login-card:hover::before {
+    animation: shineBorder 2s linear infinite, glowPulse 1.8s ease-in-out infinite;
+  }
+
+  body.login-scene .login-card-inner {
+    position: relative;
+    z-index: 1;
+    background:
+      radial-gradient(120% 85% at 50% 0%, rgba(56, 189, 248, 0.14), transparent 62%),
+      rgba(7, 13, 32, 0.6);
+    border-radius: 18px;
+    padding: 2rem;
+    overflow: hidden;
+    box-shadow: inset 0 0 30px rgba(103, 242, 255, 0.12), inset 0 0 64px rgba(59, 130, 246, 0.12);
+  }
+  /* Soft shiny snow-glow sweeping inside the card */
+  body.login-scene .login-card-inner::after {
+    content: "";
+    position: absolute; inset: 0;
+    border-radius: 18px;
+    background: linear-gradient(120deg, transparent 32%, rgba(180, 225, 255, 0.10) 47%, rgba(255, 255, 255, 0.16) 50%, rgba(180, 225, 255, 0.10) 53%, transparent 68%);
+    background-size: 260% 260%;
+    animation: innerSnow 6.5s linear infinite;
+    pointer-events: none;
+  }
+  @keyframes innerSnow {
+    0% { background-position: 130% 0; }
+    100% { background-position: -130% 0; }
+  }
+
+  /* Twinkling snow specks hugging the neon frame */
+  body.login-scene .neon-sparks {
+    position: absolute; inset: -8px;
+    border-radius: 28px;
+    pointer-events: none;
+    z-index: 4;
+    overflow: hidden;
+  }
+  body.login-scene .neon-sparks::before,
+  body.login-scene .neon-sparks::after {
+    content: "";
+    position: absolute; top: 0; left: 0;
+    width: 3px; height: 3px; border-radius: 50%;
+    background: #eaffff;
+    box-shadow:
+      6px 60px 0 -1px rgba(200, 244, 255, 0.95),
+      120px 4px 0 rgba(130, 220, 255, 0.85),
+      260px 10px 0 -1px rgba(235, 250, 255, 0.9),
+      392px 40px 0 rgba(150, 225, 255, 0.85),
+      8px 200px 0 rgba(210, 246, 255, 0.9),
+      398px 210px 0 -1px rgba(180, 235, 255, 0.9),
+      10px 360px 0 rgba(140, 225, 255, 0.85),
+      396px 380px 0 -1px rgba(220, 248, 255, 0.95),
+      140px 470px 0 rgba(170, 235, 255, 0.85),
+      280px 476px 0 -1px rgba(205, 245, 255, 0.9);
+    animation: sparkTwinkle 2.6s ease-in-out infinite;
+  }
+  body.login-scene .neon-sparks::after {
+    transform: scaleX(-1);
+    animation-delay: 1.3s;
+    opacity: 0.75;
+  }
+  @keyframes sparkTwinkle {
+    0%, 100% { opacity: 0.2; }
+    50% { opacity: 1; }
+  }
+  @media (min-width: 768px) {
+    body.login-scene .login-card-inner { padding: 2.5rem; }
+  }
+
+  body.login-scene .campus-card { background: transparent; border: none; }
+
+  body.login-scene .login-title {
+    color: var(--ink);
+    letter-spacing: 0.4px;
+    text-shadow: 0 0 20px rgba(34, 211, 238, 0.45);
+    animation: fadeIn 0.8s ease 0.2s both;
+  }
+  body.login-scene .login-sub { color: var(--ink-dim); animation: fadeIn 0.8s ease 0.3s both; }
+  body.login-scene .form-label { color: rgba(200, 222, 255, 0.9); font-size: 0.82rem; }
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+  /* Sign In / Register tabs */
+  .auth-nav-pill {
+    position: relative;
+    background: rgba(10, 22, 48, 0.7);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 4px;
+    display: flex;
+    gap: 4px;
+    box-shadow: inset 0 0 18px rgba(34, 211, 238, 0.06);
+  }
+  .auth-nav-btn {
+    position: relative;
+    z-index: 2;
+    flex: 1;
+    border-radius: 999px;
+    border: none;
+    padding: 0.55rem 1rem;
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: var(--ink-dim);
+    background: transparent;
+    transition: color 0.25s ease, background 0.25s ease, box-shadow 0.25s ease;
+    cursor: pointer;
+  }
+  .auth-nav-btn.active {
+    background: linear-gradient(90deg, #22d3ee, #3b82f6);
+    color: #ffffff;
+    box-shadow: 0 4px 18px rgba(34, 211, 238, 0.5), 0 0 12px rgba(59, 130, 246, 0.5);
+  }
+  .auth-nav-btn.active::after {
+    content: "";
+    position: absolute; inset: 0;
+    border-radius: 999px;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.35), transparent);
+    background-size: 200% 100%;
+    animation: tabSheen 2.6s linear infinite;
+    pointer-events: none;
+  }
+  @keyframes tabSheen { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+  .auth-nav-btn:hover:not(.active) {
+    color: #ffffff;
+    background: rgba(34, 211, 238, 0.12);
+  }
+
+  /* Smooth pane fade on switch (no layout jump) */
+  #authPaneLogin:not(.d-none), #authPaneRegister:not(.d-none) {
+    animation: paneIn 0.4s ease both;
+  }
+  @keyframes paneIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+  /* Staggered entrance of login form fields */
+  #authPaneLogin form > div, #authPaneLogin .btn-login-scene, #authPaneLogin .divider-light {
+    animation: fieldIn 0.5s ease both;
+  }
+  #authPaneLogin form > div:nth-child(1) { animation-delay: 0.18s; }
+  #authPaneLogin form > div:nth-child(2) { animation-delay: 0.28s; }
+  #authPaneLogin form > div:nth-child(3) { animation-delay: 0.38s; }
+  #authPaneLogin .btn-login-scene { animation-delay: 0.48s; }
+  #authPaneLogin .divider-light { animation-delay: 0.58s; }
+  @keyframes fieldIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+  /* Dark navy inputs with cyan focus glow */
+  body.login-scene .login-input {
+    background: rgba(6, 14, 34, 0.85);
+    border: 1px solid var(--line);
+    color: var(--ink);
+    border-radius: 10px;
+    padding: 0.65rem 0.9rem;
+    font-size: 0.9rem;
+    transition: border-color 0.22s ease, box-shadow 0.22s ease, background 0.22s ease;
+  }
+  body.login-scene select.login-input {
+    background-color: rgba(6, 14, 34, 0.95);
+    color: var(--ink);
+  }
+  body.login-scene select.login-input option {
+    background: #0a1430;
+    color: var(--ink);
+  }
+  body.login-scene .login-input::placeholder { color: rgba(150, 180, 235, 0.5); }
+  body.login-scene .login-input:focus {
+    background: rgba(8, 18, 42, 0.95);
+    border-color: var(--cyan);
+    color: var(--ink);
+    box-shadow: 0 0 0 0.2rem rgba(34, 211, 238, 0.22), 0 0 16px rgba(34, 211, 238, 0.35);
+    outline: none;
+  }
+  body.login-scene .input-group-text {
+    background: rgba(6, 14, 34, 0.85);
+    border: 1px solid var(--line);
+    color: var(--cyan);
+    transition: color 0.22s ease, box-shadow 0.22s ease;
+  }
+  body.login-scene .input-group:focus-within .input-group-text {
+    color: var(--cyan-bright);
+    box-shadow: inset 0 0 12px rgba(34, 211, 238, 0.25);
+  }
+
+  /* Role Selection Radio Buttons */
+  .role-btn-group .btn-outline-primary {
+    border-color: var(--line);
+    color: var(--ink-dim);
+    background: rgba(6, 14, 34, 0.6);
+    font-size: 0.82rem;
+    padding: 0.55rem 0.6rem;
+  }
+  .role-btn-group .btn-check:checked + .btn-outline-primary {
+    background: linear-gradient(90deg, #22d3ee, #3b82f6);
+    border-color: var(--cyan);
+    color: #ffffff;
+    box-shadow: 0 4px 14px rgba(34, 211, 238, 0.4);
+  }
+
+  body.login-scene .text-link-light { color: var(--cyan-bright); cursor: pointer; transition: color 0.2s ease; }
+  body.login-scene .text-link-light:hover { color: #ffffff; text-decoration: underline !important; }
+  body.login-scene .form-check-label { color: rgba(200, 222, 255, 0.9); }
+  body.login-scene .form-check-input { background-color: rgba(6, 14, 34, 0.9); border-color: var(--line); cursor: pointer; transition: box-shadow 0.2s ease, background 0.2s ease, border-color 0.2s ease; }
+  body.login-scene .form-check-input:checked { background-color: var(--cyan); border-color: var(--cyan); box-shadow: 0 0 10px rgba(34, 211, 238, 0.5); }
+  body.login-scene .form-check-input:focus-visible { box-shadow: 0 0 0 0.2rem rgba(34, 211, 238, 0.3); border-color: var(--cyan); }
+  body.login-scene .divider-light { border-top: 1px solid var(--line); }
+
+  /* Glowing blue→cyan button */
+  .btn-login-scene {
+    background: linear-gradient(90deg, #22d3ee 0%, #3b82f6 50%, #22d3ee 100%);
+    background-size: 200% 100%;
+    color: #ffffff;
+    font-weight: 800;
+    border: none;
+    letter-spacing: 0.4px;
+    box-shadow: 0 8px 24px -6px rgba(34, 211, 238, 0.6), 0 0 20px rgba(59, 130, 246, 0.4);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    position: relative;
+    overflow: hidden;
+    animation: btnGradient 5s linear infinite;
+  }
+  @keyframes btnGradient { 0% { background-position: 0% 0; } 100% { background-position: 200% 0; } }
+  .btn-login-scene::after {
+    content: "";
+    position: absolute;
+    top: 0; left: -60%;
+    width: 40%; height: 100%;
+    background: linear-gradient(120deg, transparent, rgba(255,255,255,0.5), transparent);
+    transform: skewX(-20deg);
+    animation: btnShine 3.4s ease-in-out infinite;
+  }
+  @keyframes btnShine {
+    0% { left: -60%; }
+    55% { left: 130%; }
+    100% { left: 130%; }
+  }
+  .btn-login-scene:hover {
+    color: #ffffff;
+    transform: translateY(-2px) scale(1.015);
+    box-shadow: 0 12px 30px -6px rgba(34, 211, 238, 0.8), 0 0 28px rgba(59, 130, 246, 0.6);
+  }
+  .btn-login-scene:active { transform: translateY(0) scale(0.99); }
+  /* Loading state shown while the real form submits */
+  .btn-login-scene.is-loading { pointer-events: none; }
+  .btn-login-scene.is-loading .btn-label { opacity: 0; }
+  .btn-login-scene .btn-label { transition: opacity 0.2s ease; }
+  .btn-login-scene .btn-spinner {
+    position: absolute; top: 50%; left: 50%;
+    width: 20px; height: 20px; margin: -10px 0 0 -10px;
+    border: 2.5px solid rgba(255,255,255,0.4);
+    border-top-color: #ffffff;
+    border-radius: 50%;
+    opacity: 0;
+    animation: spin 0.7s linear infinite;
+  }
+  .btn-login-scene.is-loading .btn-spinner { opacity: 1; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  body.login-scene .quick-fill-label { color: var(--ink-dim); }
+  body.login-scene .btn-quickfill {
+    background: rgba(6, 14, 34, 0.7);
+    border: 1px solid var(--line);
+    color: #cfe0ff;
+    font-size: 0.78rem;
+    transition: all 0.2s ease;
+  }
+  body.login-scene .btn-quickfill:hover {
+    background: rgba(34, 211, 238, 0.14);
+    border-color: var(--cyan);
+    color: #ffffff;
+    box-shadow: 0 0 14px rgba(34, 211, 238, 0.35);
+    transform: translateY(-1px);
+  }
+  body.login-scene .btn-quickfill:active { transform: translateY(0); }
+
+  /* Password helper box in dark theme */
+  .pw-checklist-box {
+    background: rgba(6, 14, 34, 0.6);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 0.65rem 0.85rem;
+  }
+
+  /* Responsive: tone down background effects on small screens */
+  @media (max-width: 576px) {
+    .scene-decor .pt.p4, .scene-decor .pt.p6, .scene-decor .pt.p8 { display: none; }
+    .scene-decor svg.wire { width: 220px; height: 170px; opacity: 0.3; }
+    body.login-scene .login-card { animation: cardEntrance 0.7s cubic-bezier(0.22, 1, 0.36, 1) both; }
+  }
+
+  /* Accessibility: respect reduced-motion (no flashing/moving) */
+  @media (prefers-reduced-motion: reduce) {
+    body.login-scene *,
+    body.login-scene *::before,
+    body.login-scene *::after {
+      animation-duration: 0.001ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.001ms !important;
+    }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Decorative neon background: orbs, pixel cluster, wireframe city -->
+<div class="scene-decor" aria-hidden="true">
+  <div class="grid-overlay"></div>
+  <span class="sweep"></span>
+  <span class="pt p1"></span>
+  <span class="pt p2"></span>
+  <span class="pt p3"></span>
+  <span class="pt p4"></span>
+  <span class="pt p5"></span>
+  <span class="pt p6"></span>
+  <span class="pt p7"></span>
+  <span class="pt p8"></span>
+  <svg class="wire left" viewBox="0 0 320 240" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="#22d3ee" stroke-width="1.2">
+    <path d="M20 240 V120 L80 90 V240 M80 120 L140 100 V240 M140 140 L200 120 V240"/>
+    <path d="M20 150 L80 125 M20 180 L80 155 M80 150 L140 130 M80 180 L140 160 M140 170 L200 150 M140 200 L200 180" opacity="0.7"/>
+    <path d="M40 240 V135 M60 240 V125 M100 240 V118 M120 240 V112 M160 240 V128 M180 240 V124" opacity="0.5"/>
+  </svg>
+  <svg class="wire right" viewBox="0 0 320 240" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="#22d3ee" stroke-width="1.2">
+    <path d="M20 240 V130 L80 100 V240 M80 130 L140 110 V240 M140 150 L200 130 V240"/>
+    <path d="M20 160 L80 135 M20 190 L80 165 M80 160 L140 140 M80 190 L140 170 M140 180 L200 160 M140 210 L200 190" opacity="0.7"/>
+    <path d="M40 240 V145 M60 240 V135 M100 240 V128 M120 240 V122 M160 240 V138 M180 240 V134" opacity="0.5"/>
+  </svg>
+</div>
+
+<div class="container py-4 position-relative">
+  <div class="row justify-content-center">
+    <div class="{% if active_tab == 'register' %}col-md-10 col-lg-7{% else %}col-md-8 col-lg-5{% endif %}" id="authCardCol">
+
+      <div class="card login-card shadow-lg">
+        <span class="neon-sparks" aria-hidden="true"></span>
+        <div class="login-card-inner">
+
+          <!-- Unified In-Place Switcher Tabs -->
+          <div class="auth-nav-pill mb-4" role="tablist">
+            <button type="button" class="auth-nav-btn {% if active_tab != 'register' %}active{% endif %}" id="tabBtnLogin" onclick="switchAuthTab('login')">
+              <i class="fa-solid fa-arrow-right-to-bracket me-1"></i> Sign In
+            </button>
+            <button type="button" class="auth-nav-btn {% if active_tab == 'register' %}active{% endif %}" id="tabBtnRegister" onclick="switchAuthTab('register')">
+              <i class="fa-solid fa-user-plus me-1"></i> Register
+            </button>
+          </div>
+
+          <!-- Flash Notification Messages directly inside card -->
+          {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+              <div class="mb-3">
+                {% for category, message in messages %}
+                  <div class="alert alert-{{ category if category != 'error' else 'danger' }} alert-dismissible fade show shadow-sm py-2 px-3 small border-0" role="alert">
+                    <i class="fa-solid {% if category == 'success' %}fa-circle-check{% elif category == 'danger' %}fa-triangle-exclamation{% else %}fa-circle-info{% endif %} me-2"></i>
+                    {{ message }}
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="alert"></button>
+                  </div>
+                {% endfor %}
+              </div>
+            {% endif %}
+          {% endwith %}
+
+          <!-- ============================================================= -->
+          <!-- PANE 1: SIGN IN (LOGIN)                                        -->
+          <!-- ============================================================= -->
+          <div id="authPaneLogin" class="{% if active_tab == 'register' %}d-none{% endif %}">
+            <div class="text-center mb-4">
+              <h3 class="fw-bold login-title mb-1">Welcome Back</h3>
+              <p class="login-sub small mb-0">Sign in to your college account</p>
+            </div>
+
+            <form method="POST" action="{{ url_for('auth.login', next=request.args.get('next')) }}">
+              <div class="mb-3">
+                <label class="form-label fw-bold">Email Address</label>
+                <div class="input-group">
+                  <input type="email" id="emailInput" name="email" class="form-control login-input border-end-0" placeholder="nithina200XXX@gmail.com" value="{{ request.args.get('email', '') }}" required>
+                  <span class="input-group-text border-start-0 rounded-end"><i class="fa-solid fa-user"></i></span>
+                </div>
+              </div>
+
+              <div class="mb-3">
+                <label class="form-label fw-bold">Password</label>
+                <div class="input-group">
+                  <input type="password" id="passwordInput" name="password" class="form-control login-input border-end-0" placeholder="••••••••" required>
+                  <span class="input-group-text border-start-0 rounded-end"><i class="fa-solid fa-lock"></i></span>
+                </div>
+              </div>
+
+              <div class="d-flex justify-content-between align-items-center mb-4">
+                <div class="form-check">
+                  <input class="form-check-input" type="checkbox" id="rememberMe">
+                  <label class="form-check-label small" for="rememberMe">Remember me</label>
+                </div>
+                <a href="{{ url_for('auth.forgot_password') }}" class="small text-decoration-none text-link-light">Forgot password?</a>
+              </div>
+
+              <button type="submit" class="btn btn-login-scene btn-lg rounded-pill w-100 fw-bold mb-3">
+                <span class="btn-label">Log In <i class="fa-solid fa-arrow-right-to-bracket ms-1"></i></span>
+                <span class="btn-spinner" aria-hidden="true"></span>
+              </button>
+            </form>
+
+            <div class="text-center small login-sub">
+              Don't have an account? <a href="#" onclick="switchAuthTab('register'); return false;" class="text-link-light fw-bold text-decoration-none">Register here</a>
+            </div>
+
+            <!-- Quick Fill Helper for Easy Developer & Evaluator Testing -->
+            <div class="divider-light mt-4 pt-3">
+              <div class="quick-fill-label small fw-bold mb-2 text-uppercase text-center"><i class="fa-solid fa-wand-magic-sparkles text-info me-1"></i> Quick Fill Test Accounts</div>
+              <div class="d-flex flex-wrap gap-1 justify-content-center">
+                <button type="button" class="btn btn-xs btn-quickfill rounded-pill" onclick="fillCreds('admin@gechassan.ac.in', 'Admin@123')">Main Admin</button>
+                <button type="button" class="btn btn-xs btn-quickfill rounded-pill" onclick="fillCreds('canteen@gechassan.ac.in', 'Canteen@123')">Canteen Admin</button>
+                <button type="button" class="btn btn-xs btn-quickfill rounded-pill" onclick="fillCreds('teacher@gechassan.ac.in', 'Teacher@123')">Teacher</button>
+                <button type="button" class="btn btn-xs btn-quickfill rounded-pill" onclick="fillCreds('student@gechassan.ac.in', 'Student@123')">Student</button>
+                <button type="button" class="btn btn-xs btn-quickfill rounded-pill" onclick="fillCreds('visitor@gechassan.ac.in', 'Visitor@123')">Visitor</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- ============================================================= -->
+          <!-- PANE 2: REGISTER (IN-PLACE SIGN UP)                           -->
+          <!-- ============================================================= -->
+          <div id="authPaneRegister" class="{% if active_tab != 'register' %}d-none{% endif %}">
+            <div class="text-center mb-3">
+              <h3 class="fw-bold login-title mb-1">Create Account</h3>
+              <p class="login-sub small mb-0">Join Government Engineering College, Mosalehosahalli</p>
+            </div>
+
+            {% set sel_role = form_data.get('role', 'student') if form_data else 'student' %}
+
+            <form method="POST" action="{{ url_for('auth.register') }}" id="registerForm">
+              
+              <!-- Role Selection Buttons -->
+              <div class="mb-3">
+                <label class="form-label fw-bold">Select Role <span class="text-danger">*</span></label>
+                <div class="btn-group w-100 shadow-sm role-btn-group" role="group">
+                  <input type="radio" class="btn-check" name="role" id="roleStudent" value="student" {% if sel_role == 'student' %}checked{% endif %}>
+                  <label class="btn btn-outline-primary fw-bold" for="roleStudent">
+                    <i class="fa-solid fa-user-graduate me-1"></i> Student
+                  </label>
+
+                  <input type="radio" class="btn-check" name="role" id="roleTeacher" value="teacher" {% if sel_role == 'teacher' %}checked{% endif %}>
+                  <label class="btn btn-outline-primary fw-bold" for="roleTeacher">
+                    <i class="fa-solid fa-chalkboard-user me-1"></i> Teacher
+                  </label>
+
+                  <input type="radio" class="btn-check" name="role" id="roleVisitor" value="visitor" {% if sel_role == 'visitor' %}checked{% endif %}>
+                  <label class="btn btn-outline-primary fw-bold" for="roleVisitor">
+                    <i class="fa-solid fa-street-view me-1"></i> Visitor
+                  </label>
+                </div>
+              </div>
+
+              <!-- Teacher Verification Advisory Banner -->
+              <div id="teacherAdvisory" class="alert alert-warning bg-warning bg-opacity-10 border-warning border-opacity-25 rounded-3 mb-3 py-2 px-3 small d-none text-light">
+                <div class="d-flex align-items-center gap-2 mb-1">
+                  <i class="fa-solid fa-shield-halved text-warning"></i>
+                  <strong class="text-warning">Faculty Verification Protocol:</strong>
+                </div>
+                <div>Teacher accounts require Employee ID verification by Main Admin to activate Teacher-First Canteen Priority.</div>
+              </div>
+
+              <!-- Visitor Access Guidance Banner -->
+              <div id="visitorAdvisory" class="alert alert-info bg-info bg-opacity-10 border-info border-opacity-25 rounded-3 mb-3 py-2 px-3 small d-none text-light">
+                <div class="d-flex align-items-center gap-2 mb-1">
+                  <i class="fa-solid fa-circle-info text-info"></i>
+                  <strong class="text-info">Visitor Access:</strong>
+                </div>
+                <div>Access public campus navigation, waypoints, and guest canteen bookings.</div>
+              </div>
+
+              <!-- Personal Fields (Name & Email) -->
+              <div class="row g-2 mb-3">
+                <div class="col-md-6">
+                  <label class="form-label fw-bold">Full Name <span class="text-danger">*</span></label>
+                  <input type="text" name="full_name" class="form-control login-input" placeholder="Nithin A" value="{{ form_data.get('full_name', '') if form_data else '' }}" required>
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label fw-bold">Email Address <span class="text-danger">*</span></label>
+                  <input type="email" name="email" class="form-control login-input" placeholder="nithina200XXX@gmail.com" value="{{ form_data.get('email', '') if form_data else '' }}" required>
+                </div>
+              </div>
+
+              <!-- Dynamic Department & Phone (Student & Teacher) -->
+              {% set sel_dept = form_data.get('department', 'Computer Science & Engineering') if form_data else 'Computer Science & Engineering' %}
+              <div id="deptSection" class="row g-2 mb-3">
+                <div class="col-md-7">
+                  <label class="form-label fw-bold">Department / Branch <span class="text-danger">*</span></label>
+                  <select name="department" id="departmentInput" class="form-select login-input">
+                    <option value="Computer Science & Engineering" {% if sel_dept == 'Computer Science & Engineering' %}selected{% endif %}>Computer Science & Engineering</option>
+                    <option value="Electronics & Communication Engineering" {% if sel_dept == 'Electronics & Communication Engineering' %}selected{% endif %}>Electronics & Communication Engineering</option>
+                    <option value="Mechanical Engineering" {% if sel_dept == 'Mechanical Engineering' %}selected{% endif %}>Mechanical Engineering</option>
+                    <option value="Civil Engineering" {% if sel_dept == 'Civil Engineering' %}selected{% endif %}>Civil Engineering</option>
+                    <option value="Basic Science & Humanities" {% if sel_dept == 'Basic Science & Humanities' %}selected{% endif %}>Basic Science & Humanities</option>
+                    <option value="Campus Administration" {% if sel_dept == 'Campus Administration' %}selected{% endif %}>Campus Administration</option>
+                  </select>
+                </div>
+                <div class="col-md-5">
+                  <label class="form-label fw-bold">Phone Number</label>
+                  <input type="text" name="phone" class="form-control login-input" placeholder="+9186602XXXXX" value="{{ form_data.get('phone', '') if form_data else '' }}">
+                </div>
+              </div>
+
+              <!-- Student-Only Fields: USN & Semester -->
+              {% set sel_sem = form_data.get('semester', '5th Semester') if form_data else '5th Semester' %}
+              <div id="studentFields" class="row g-2 mb-3">
+                <div class="col-md-7">
+                  <label class="form-label fw-bold">University USN <span class="text-danger">*</span></label>
+                  <input type="text" name="usn" id="usnInput" class="form-control login-input text-uppercase" placeholder="4HG24CS037" value="{{ form_data.get('usn', '') if form_data else '' }}">
+                </div>
+                <div class="col-md-5">
+                  <label class="form-label fw-bold">Current Semester</label>
+                  <select name="semester" class="form-select login-input">
+                    {% for sem in ['1st Semester', '2nd Semester', '3rd Semester', '4th Semester', '5th Semester', '6th Semester', '7th Semester', '8th Semester'] %}
+                      <option value="{{ sem }}" {% if sel_sem == sem %}selected{% endif %}>{{ sem }}</option>
+                    {% endfor %}
+                  </select>
+                </div>
+              </div>
+
+              <!-- Teacher-Only Fields: Employee ID & Designation -->
+              {% set sel_desig = form_data.get('designation', 'Assistant Professor') if form_data else 'Assistant Professor' %}
+              <div id="teacherFields" class="row g-2 mb-3 d-none">
+                <div class="col-md-6">
+                  <label class="form-label fw-bold">Official Employee ID <span class="text-danger">*</span></label>
+                  <input type="text" name="employee_id" id="empIdInput" class="form-control login-input text-uppercase" placeholder="e.g. EMP-CSE-042" value="{{ form_data.get('employee_id', '') if form_data else '' }}">
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label fw-bold">Academic Designation <span class="text-danger">*</span></label>
+                  <select name="designation" class="form-select login-input">
+                    {% for d in ['Assistant Professor', 'Associate Professor', 'Professor', 'Professor & HOD', 'Technical Instructor'] %}
+                      <option value="{{ d }}" {% if sel_desig == d %}selected{% endif %}>{{ d }}</option>
+                    {% endfor %}
+                  </select>
+                </div>
+              </div>
+
+              <!-- Visitor-Only Fields: Purpose of Visit -->
+              {% set sel_pov = form_data.get('purpose_of_visit', 'Parent Meeting / Faculty Interaction') if form_data else 'Parent Meeting / Faculty Interaction' %}
+              <div id="visitorFields" class="row g-2 mb-3 d-none">
+                <div class="col-12">
+                  <label class="form-label fw-bold">Purpose of Campus Visit <span class="text-danger">*</span></label>
+                  <select name="purpose_of_visit" class="form-select login-input">
+                    {% for pov in ['Parent Meeting / Faculty Interaction', 'Prospective Student Admission Enquiry', 'Academic Seminar / Conference Guest', 'Campus Facilities Tour', 'Official / Vendor Visit'] %}
+                      <option value="{{ pov }}" {% if sel_pov == pov %}selected{% endif %}>{{ pov }}</option>
+                    {% endfor %}
+                  </select>
+                </div>
+              </div>
+
+              <!-- Password Fields -->
+              <div class="row g-2 mb-2">
+                <div class="col-md-6">
+                  <label class="form-label fw-bold">Password <span class="text-danger">*</span></label>
+                  <input type="password" id="regPassword" name="password" class="form-control login-input" placeholder="••••••••" required autocomplete="new-password">
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label fw-bold">Confirm Password <span class="text-danger">*</span></label>
+                  <input type="password" id="regConfirmPassword" name="confirm_password" class="form-control login-input" placeholder="••••••••" required autocomplete="new-password">
+                </div>
+              </div>
+
+              <!-- Real-time Password Requirements Checklist -->
+              <div class="pw-checklist-box mb-3">
+                <div class="d-flex flex-wrap gap-3 small" style="font-size: 0.78rem;">
+                  <span id="pwLenCheck" class="text-muted"><i class="fa-regular fa-circle me-1"></i> 8+ chars</span>
+                  <span id="pwAlphaNumCheck" class="text-muted"><i class="fa-regular fa-circle me-1"></i> Letters &amp; numbers</span>
+                  <span id="pwMatchCheck" class="text-muted"><i class="fa-regular fa-circle me-1"></i> Passwords match</span>
+                </div>
+              </div>
+
+              <button type="submit" id="submitBtn" class="btn btn-login-scene btn-lg rounded-pill w-100 fw-bold mb-3 shadow">
+                <span class="btn-label">Create Account <i class="fa-solid fa-arrow-right ms-1"></i></span>
+                <span class="btn-spinner" aria-hidden="true"></span>
+              </button>
+            </form>
+
+            <div class="text-center small login-sub">
+              Already have an account? <a href="#" onclick="switchAuthTab('login'); return false;" class="text-link-light fw-bold text-decoration-none">Sign in here</a>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+function fillCreds(email, pwd) {
+  document.getElementById('emailInput').value = email;
+  document.getElementById('passwordInput').value = pwd;
+}
+
+// Show a loading spinner on the real submit button (does not alter submission or auth)
+document.querySelectorAll('form').forEach(function(form) {
+  form.addEventListener('submit', function() {
+    if (form.checkValidity && !form.checkValidity()) return;
+    var btn = form.querySelector('.btn-login-scene');
+    if (btn) btn.classList.add('is-loading');
+  });
+});
+
+// In-place Auth Tab Switching
+function switchAuthTab(tab) {
+  const paneLogin = document.getElementById('authPaneLogin');
+  const paneRegister = document.getElementById('authPaneRegister');
+  const tabBtnLogin = document.getElementById('tabBtnLogin');
+  const tabBtnRegister = document.getElementById('tabBtnRegister');
+  const cardCol = document.getElementById('authCardCol');
+
+  if (tab === 'register') {
+    paneLogin.classList.add('d-none');
+    paneRegister.classList.remove('d-none');
+    tabBtnLogin.classList.remove('active');
+    tabBtnRegister.classList.add('active');
+    if (cardCol) {
+      cardCol.className = 'col-md-10 col-lg-7';
+    }
+    updateRoleFields();
+    if (window.history && window.history.replaceState) {
+      const url = new URL(window.location);
+      url.searchParams.set('tab', 'register');
+      window.history.replaceState({}, '', url);
+    }
+  } else {
+    paneRegister.classList.add('d-none');
+    paneLogin.classList.remove('d-none');
+    tabBtnRegister.classList.remove('active');
+    tabBtnLogin.classList.add('active');
+    if (cardCol) {
+      cardCol.className = 'col-md-8 col-lg-5';
+    }
+    if (window.history && window.history.replaceState) {
+      const url = new URL(window.location);
+      url.searchParams.delete('tab');
+      window.history.replaceState({}, '', url);
+    }
+  }
+}
+
+// Role-dependent field toggle
+function updateRoleFields() {
+  const roleStudent = document.getElementById('roleStudent');
+  const roleTeacher = document.getElementById('roleTeacher');
+  const roleVisitor = document.getElementById('roleVisitor');
+  if (!roleStudent) return;
+
+  const isStudent = roleStudent.checked;
+  const isTeacher = roleTeacher.checked;
+  const isVisitor = roleVisitor.checked;
+
+  const teacherAdvisory = document.getElementById('teacherAdvisory');
+  const visitorAdvisory = document.getElementById('visitorAdvisory');
+  const deptSection = document.getElementById('deptSection');
+  const studentFields = document.getElementById('studentFields');
+  const teacherFields = document.getElementById('teacherFields');
+  const visitorFields = document.getElementById('visitorFields');
+
+  const usnInput = document.getElementById('usnInput');
+  const empIdInput = document.getElementById('empIdInput');
+
+  if (isStudent) {
+    if (teacherAdvisory) teacherAdvisory.classList.add('d-none');
+    if (visitorAdvisory) visitorAdvisory.classList.add('d-none');
+    if (deptSection) deptSection.classList.remove('d-none');
+    if (studentFields) studentFields.classList.remove('d-none');
+    if (teacherFields) teacherFields.classList.add('d-none');
+    if (visitorFields) visitorFields.classList.add('d-none');
+
+    if (usnInput) { usnInput.required = true; usnInput.disabled = false; }
+    if (empIdInput) { empIdInput.required = false; empIdInput.disabled = true; }
+  } else if (isTeacher) {
+    if (teacherAdvisory) teacherAdvisory.classList.remove('d-none');
+    if (visitorAdvisory) visitorAdvisory.classList.add('d-none');
+    if (deptSection) deptSection.classList.remove('d-none');
+    if (studentFields) studentFields.classList.add('d-none');
+    if (teacherFields) teacherFields.classList.remove('d-none');
+    if (visitorFields) visitorFields.classList.add('d-none');
+
+    if (usnInput) { usnInput.required = false; usnInput.disabled = true; }
+    if (empIdInput) { empIdInput.required = true; empIdInput.disabled = false; }
+  } else if (isVisitor) {
+    if (teacherAdvisory) teacherAdvisory.classList.add('d-none');
+    if (visitorAdvisory) visitorAdvisory.classList.remove('d-none');
+    if (deptSection) deptSection.classList.add('d-none');
+    if (studentFields) studentFields.classList.add('d-none');
+    if (teacherFields) teacherFields.classList.add('d-none');
+    if (visitorFields) visitorFields.classList.remove('d-none');
+
+    if (usnInput) { usnInput.required = false; usnInput.disabled = true; }
+    if (empIdInput) { empIdInput.required = false; empIdInput.disabled = true; }
+  }
+}
+
+// Attach role change listeners
+document.querySelectorAll('input[name="role"]').forEach(function(radio) {
+  radio.addEventListener('change', updateRoleFields);
+  radio.addEventListener('click', updateRoleFields);
+});
+
+// Real-time password requirement checker
+const pwInput = document.getElementById('regPassword');
+const confirmPwInput = document.getElementById('regConfirmPassword');
+const pwLenCheck = document.getElementById('pwLenCheck');
+const pwAlphaNumCheck = document.getElementById('pwAlphaNumCheck');
+const pwMatchCheck = document.getElementById('pwMatchCheck');
+
+function checkPassword() {
+  if (!pwInput || !confirmPwInput) return;
+  const val = pwInput.value || '';
+  const confirmVal = confirmPwInput.value || '';
+
+  // Length check (>= 8)
+  if (val.length >= 8) {
+    pwLenCheck.className = 'text-success fw-bold';
+    pwLenCheck.innerHTML = '<i class="fa-solid fa-circle-check me-1"></i> 8+ chars';
+  } else {
+    pwLenCheck.className = val.length > 0 ? 'text-danger' : 'text-muted';
+    pwLenCheck.innerHTML = '<i class="fa-regular fa-circle me-1"></i> 8+ chars';
+  }
+
+  // Alpha + Numeric check
+  const hasLetter = /[A-Za-z]/.test(val);
+  const hasDigit = /\d/.test(val);
+  if (hasLetter && hasDigit) {
+    pwAlphaNumCheck.className = 'text-success fw-bold';
+    pwAlphaNumCheck.innerHTML = '<i class="fa-solid fa-circle-check me-1"></i> Letters &amp; numbers';
+  } else {
+    pwAlphaNumCheck.className = val.length > 0 ? 'text-danger' : 'text-muted';
+    pwAlphaNumCheck.innerHTML = '<i class="fa-regular fa-circle me-1"></i> Letters &amp; numbers';
+  }
+
+  // Match check
+  if (confirmVal.length > 0) {
+    if (val === confirmVal) {
+      pwMatchCheck.className = 'text-success fw-bold';
+      pwMatchCheck.innerHTML = '<i class="fa-solid fa-circle-check me-1"></i> Passwords match';
+      confirmPwInput.setCustomValidity('');
+    } else {
+      pwMatchCheck.className = 'text-danger';
+      pwMatchCheck.innerHTML = '<i class="fa-solid fa-circle-xmark me-1"></i> Passwords do not match';
+      confirmPwInput.setCustomValidity('Passwords do not match');
+    }
+  } else {
+    pwMatchCheck.className = 'text-muted';
+    pwMatchCheck.innerHTML = '<i class="fa-regular fa-circle me-1"></i> Passwords match';
+    confirmPwInput.setCustomValidity('');
+  }
+}
+
+if (pwInput && confirmPwInput) {
+  pwInput.addEventListener('input', checkPassword);
+  confirmPwInput.addEventListener('input', checkPassword);
+}
+
+// Enable the neon smart-city background for this page
+document.body.classList.add('login-scene');
+
+// Check URL params / active_tab on load
+document.addEventListener('DOMContentLoaded', function() {
+  const params = new URLSearchParams(window.location.search);
+  const tab = params.get('tab') || window.location.hash.replace('#', '');
+  if (tab === 'register' || document.getElementById('authPaneRegister').classList.contains('active-initial')) {
+    switchAuthTab('register');
+  } else {
+    updateRoleFields();
+  }
+});
+</script>
+{% endblock %}

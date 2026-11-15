@@ -1,0 +1,273 @@
+{% extends "base.html" %}
+
+{% block title %}Exam Room Finder Manager{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-lg-4 py-4">
+
+  <div class="d-flex flex-wrap justify-content-between align-items-center mb-4">
+    <div>
+      <span class="badge bg-primary px-3 py-1 rounded-pill mb-1">
+        <i class="fa-solid fa-door-open me-1"></i> Main Admin &bull; Exam Room Finder
+      </span>
+      <h2 class="fw-bold text-dark mb-0">Exam Hall Allotment &amp; Notification Manager</h2>
+      <p class="text-muted small mb-0">Publish <b>when</b> each exam happens and <b>which room</b> hosts it &mdash; then send the allotment alert so students confirm their hall and route straight to it.</p>
+    </div>
+    <div class="d-flex align-items-center gap-2 mt-2 mt-md-0">
+      {% if stats.pending_notify %}
+      <form method="POST" action="{{ url_for('admin.notify_all_pending_exams') }}"
+            onsubmit="return confirm('Send the hall-allotment alert for ALL {{ stats.pending_notify }} not-yet-notified exam(s) to their students? Re-sending never duplicates.');">
+        <button class="btn btn-sm btn-success rounded-pill fw-bold">
+          <i class="fa-solid fa-bullhorn me-1"></i>Notify All Pending ({{ stats.pending_notify }})
+        </button>
+      </form>
+      {% endif %}
+      <a href="{{ url_for('navigation.exam_finder') }}" class="btn btn-sm btn-outline-primary rounded-pill">
+        <i class="fa-solid fa-magnifying-glass-location me-1"></i> Preview Finder
+      </a>
+      <a href="{{ url_for('admin.dashboard') }}" class="btn btn-sm btn-outline-secondary rounded-pill">
+        <i class="fa-solid fa-arrow-left me-1"></i> Master Dashboard
+      </a>
+    </div>
+  </div>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for category, message in messages %}
+      <div class="alert alert-{{ category }} rounded-3 py-2 small">{{ message }}</div>
+    {% endfor %}
+  {% endwith %}
+
+  <div class="row g-3 mb-4">
+    <div class="col-6 col-lg-3"><div class="card campus-card border-0 shadow-sm p-3 text-center"><div class="small text-muted fw-bold text-uppercase">Total Allotments</div><div class="fs-4 fw-bold text-dark">{{ stats.total }}</div></div></div>
+    <div class="col-6 col-lg-3"><div class="card campus-card border-0 shadow-sm p-3 text-center"><div class="small text-muted fw-bold text-uppercase">Upcoming</div><div class="fs-4 fw-bold text-primary">{{ stats.upcoming }}</div></div></div>
+    <div class="col-6 col-lg-3"><div class="card campus-card border-0 shadow-sm p-3 text-center"><div class="small text-muted fw-bold text-uppercase">Alerts Sent For</div><div class="fs-4 fw-bold text-success">{{ stats.notified }}</div></div></div>
+    <div class="col-6 col-lg-3"><div class="card campus-card border-0 shadow-sm p-3 text-center"><div class="small text-muted fw-bold text-uppercase">Student Notifications</div><div class="fs-4 fw-bold text-warning">{{ stats.alerts_sent }}</div></div></div>
+  </div>
+
+  <div class="row g-3">
+
+    <!-- ================= PUBLISH ONE ALLOTMENT ================= -->
+    <div class="col-xl-4">
+      <div class="card campus-card border-0 shadow-sm p-3 h-100">
+        <h6 class="fw-bold mb-3"><i class="fa-solid fa-calendar-plus text-primary me-2"></i>Upload Exam Allotment</h6>
+        <form method="POST" action="{{ url_for('admin.create_exam_schedule') }}" enctype="multipart/form-data">
+          <div class="row g-2">
+            <div class="col-5">
+              <label class="form-label small fw-bold">Subject Code *</label>
+              <input name="subject_code" class="form-control form-control-sm" placeholder="21CS401" required>
+            </div>
+            <div class="col-7">
+              <label class="form-label small fw-bold">Subject Name *</label>
+              <input name="subject_name" class="form-control form-control-sm" placeholder="Data Structures" required>
+            </div>
+            <div class="col-12">
+              <label class="form-label small fw-bold">Exam Date *</label>
+              <input name="exam_date" type="date" class="form-control form-control-sm" required>
+            </div>
+            <div class="col-4">
+              <label class="form-label small fw-bold">Time From *</label>
+              <input name="start_time" type="time" class="form-control form-control-sm" value="09:30" required>
+            </div>
+            <div class="col-4">
+              <label class="form-label small fw-bold">Time To *</label>
+              <input name="end_time" type="time" class="form-control form-control-sm" value="12:00" required>
+            </div>
+            <div class="col-4">
+              <label class="form-label small fw-bold">Day Part</label>
+              <select name="session" class="form-select form-select-sm">
+                <option value="">&mdash;</option>
+                {% for p in day_parts %}<option value="{{ p }}">{{ p }}</option>{% endfor %}
+              </select>
+            </div>
+            <div class="col-12">
+              <label class="form-label small fw-bold">Room Number</label>
+              <input name="room_number" class="form-control form-control-sm" placeholder="e.g. A-101 / Crane Hall">
+            </div>
+            <div class="col-6">
+              <label class="form-label small fw-bold">Branch / Department</label>
+              <select name="department" class="form-select form-select-sm">
+                <option value="">All Branches</option>
+                {% for b in branches %}<option value="{{ b.code }}">{{ b.emoji }} {{ b.code }} &ndash; {{ b.name }}</option>{% endfor %}
+              </select>
+            </div>
+            <div class="col-6">
+              <label class="form-label small fw-bold">Which Semester</label>
+              <select name="semester" class="form-select form-select-sm">
+                <option value="">All Semesters</option>
+                {% for s in semesters %}<option value="{{ s }}">{{ s }}</option>{% endfor %}
+              </select>
+            </div>
+            <div class="col-6">
+              <label class="form-label small fw-bold">USN From</label>
+              <input name="usn_from" class="form-control form-control-sm text-uppercase" placeholder="4HG2CS0001">
+            </div>
+            <div class="col-6">
+              <label class="form-label small fw-bold">USN To</label>
+              <input name="usn_to" class="form-control form-control-sm text-uppercase" placeholder="4HG2CS0050">
+            </div>
+            <div class="col-12">
+              <p class="small text-muted mb-0 mt-1"><i class="fa-solid fa-circle-info me-1"></i>Optionally limit this allotment to a <b>range of student USNs</b> (inclusive). Leave both blank to target the whole branch / semester.</p>
+            </div>
+            <div class="col-12">
+              <label class="form-label small fw-bold">Instructions (optional)</label>
+              <textarea name="instructions" class="form-control form-control-sm" rows="2" placeholder="Report 30 minutes early; bring hall ticket and ID card"></textarea>
+            </div>
+            <div class="col-12">
+              <label class="form-label small fw-bold">Exam Room Allotment Notice (optional &mdash; PDF or image, max 10 MB)</label>
+              <input name="attachment" type="file" accept=".pdf,.png,.jpg,.jpeg,.webp" class="form-control form-control-sm">
+            </div>
+            <div class="col-12 d-grid mt-2">
+              <button class="btn btn-primary btn-sm rounded-pill fw-bold"><i class="fa-solid fa-upload me-1"></i> Publish Allotment</button>
+            </div>
+          </div>
+        </form>
+        <p class="small text-muted mt-3 mb-0"><i class="fa-solid fa-circle-info me-1"></i>To attach a navigable map hall (route link), publish branch-by-branch with the <b>Column-wise Branch Upload</b> below.</p>
+      </div>
+    </div>
+
+    <!-- ================= ALLOTMENT TABLE ================= -->
+    <div class="col-xl-8">
+      <div class="card campus-card border-0 shadow-sm p-3">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h6 class="fw-bold mb-0"><i class="fa-solid fa-list-check text-success me-2"></i>Published Exam Allotments</h6>
+        </div>
+
+        {% if schedules %}
+        <div class="table-responsive">
+          <table class="table table-align-middle small mb-0">
+            <thead class="table-light">
+              <tr>
+                <th>Subject</th><th>Date &amp; Time</th><th>Hall</th><th>Audience</th><th>Alert Status</th><th class="text-end">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for s in schedules %}
+              <tr>
+                <td class="fw-bold text-nowrap">{{ s.subject_code }}<br><span class="text-muted fw-normal">{{ s.subject_name }}</span></td>
+                <td class="text-nowrap">{{ s.exam_date.strftime('%d %b %Y') }}<br><span class="text-muted">{{ s.time_window }}</span></td>
+                <td>
+                  {% if s.room_number %}<span class="fw-bold">{{ s.room_number }}</span><br>{% endif %}
+                  {{ s.room.name if s.room else '-' }}<br><span class="text-muted">{{ s.room.building if s.room }} &bull; {{ s.room.floor if s.room }}</span>
+                  {% if s.attachment_url %}<div class="mt-1"><a href="{{ s.attachment_url }}" target="_blank" rel="noopener" class="small"><i class="fa-solid fa-paperclip me-1"></i>Notice</a></div>{% endif %}
+                </td>
+                <td>
+                  {% if s.audience_role == 'teacher' %}<span class="badge bg-info text-dark">Teachers</span>
+                  {% else %}<span class="badge bg-secondary">Students</span>{% endif %}
+                  {% if s.department %}<div class="text-muted">{{ s.department }}{% if s.semester %} &bull; {{ s.semester }}{% endif %}</div>{% endif %}
+                  {% if s.usn_from or s.usn_to %}<div class="text-muted"><i class="fa-solid fa-id-card-clip me-1"></i>{{ s.usn_from or '…' }} &ndash; {{ s.usn_to or '…' }}</div>{% endif %}
+                </td>
+                <td>
+                  {% if s.notified_at %}
+                    <span class="badge bg-success-subtle text-success border border-success-subtle"><i class="fa-solid fa-paper-plane me-1"></i>{{ s.notify_count }} sent</span>
+                  {% else %}
+                    <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle">Not sent</span>
+                  {% endif %}
+                </td>
+                <td class="text-end text-nowrap">
+                  <form method="POST" action="{{ url_for('admin.notify_exam_schedule', schedule_id=s.id) }}" class="d-inline"
+                        onsubmit="return confirm('Send the hall-allotment alert to {{ s.audience_role }}s{% if s.department %} of {{ s.department }}{% if s.semester %} {{ s.semester }}{% endif %}{% endif %}? Re-sending never duplicates alerts.');">
+                    <button class="btn btn-sm {% if s.notified_at %}btn-outline-success{% else %}btn-success{% endif %} rounded-pill" title="Send notification to the audience">
+                      <i class="fa-solid fa-bell me-1"></i>{% if s.notified_at %}Re-send{% else %}Notify{% endif %}
+                    </button>
+                  </form>
+                  <form method="POST" action="{{ url_for('admin.delete_exam_schedule', schedule_id=s.id) }}" class="d-inline"
+                        onsubmit="return confirm('Withdraw this exam allotment?');">
+                    <button class="btn btn-sm btn-outline-danger rounded-pill" title="Withdraw allotment"><i class="fa-solid fa-trash"></i></button>
+                  </form>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+        <div class="text-center py-5">
+          <i class="fa-solid fa-door-closed fa-3x text-muted opacity-50 mb-3"></i>
+          <p class="text-muted mb-0">No exam allotments published yet. Upload one on the left or import the timetable CSV below.</p>
+        </div>
+        {% endif %}
+
+        <hr class="my-3">
+        <h6 class="fw-bold"><i class="fa-solid fa-file-csv text-primary me-2"></i>Bulk Import Timetable (CSV)</h6>
+        <form method="POST" action="{{ url_for('admin.import_exam_schedule') }}" enctype="multipart/form-data" class="row g-2 align-items-end">
+          <div class="col-sm-6">
+            <input name="csv_file" type="file" accept=".csv" class="form-control form-control-sm" required>
+          </div>
+          <div class="col-sm-3 d-grid">
+            <button class="btn btn-sm btn-primary rounded-pill"><i class="fa-solid fa-file-import me-1"></i>Import</button>
+          </div>
+          <div class="col-sm-3 d-grid">
+            <a href="{{ url_for('admin.download_import_template', kind='exams') }}" class="btn btn-sm btn-outline-secondary rounded-pill"><i class="fa-solid fa-download me-1"></i>Template</a>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= COLUMN-WISE BRANCH UPLOAD ================= -->
+  <div class="card campus-card border-0 shadow-sm p-3 mt-3">
+    <h6 class="fw-bold mb-1"><i class="fa-solid fa-table-columns text-primary me-2"></i>Column-wise Branch Upload (all branches at once)</h6>
+    <p class="small text-muted mb-3">Fill the shared subject &amp; timing once, then choose a hall + room number for each branch column. Leave a branch's hall empty to skip it. Each filled column becomes its own allotment for that branch's students.</p>
+    <form method="POST" action="{{ url_for('admin.create_exam_schedule_bulk') }}">
+      <div class="row g-2 mb-3">
+        <div class="col-md-2"><label class="form-label small fw-bold">Subject Code *</label><input name="subject_code" class="form-control form-control-sm" placeholder="21CS401" required></div>
+        <div class="col-md-3"><label class="form-label small fw-bold">Subject Name *</label><input name="subject_name" class="form-control form-control-sm" placeholder="Data Structures" required></div>
+        <div class="col-md-2"><label class="form-label small fw-bold">Exam Date *</label><input name="exam_date" type="date" class="form-control form-control-sm" required></div>
+        <div class="col-md-1"><label class="form-label small fw-bold">From *</label><input name="start_time" type="time" class="form-control form-control-sm" value="09:30" required></div>
+        <div class="col-md-1"><label class="form-label small fw-bold">To *</label><input name="end_time" type="time" class="form-control form-control-sm" value="12:00" required></div>
+        <div class="col-md-1"><label class="form-label small fw-bold">Day Part</label>
+          <select name="session" class="form-select form-select-sm"><option value="">&mdash;</option>{% for p in day_parts %}<option value="{{ p }}">{{ p }}</option>{% endfor %}</select></div>
+        <div class="col-md-2"><label class="form-label small fw-bold">Semester</label>
+          <select name="semester" class="form-select form-select-sm"><option value="">All</option>{% for s in semesters %}<option value="{{ s }}">{{ s }}</option>{% endfor %}</select></div>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-sm table-align-middle mb-0" style="vertical-align: middle;">
+          <thead class="table-light"><tr><th style="width:90px">Branch</th><th>Exam Hall (Map Room)</th><th style="width:170px">Room Number</th></tr></thead>
+          <tbody>
+            {% for b in branches %}
+            <tr>
+              <td class="fw-bold text-primary text-nowrap">{{ b.emoji }} {{ b.code }}</td>
+              <td><select name="hall_{{ b.code }}" class="form-select form-select-sm"><option value="">&mdash; skip {{ b.code }} ({{ b.name }}) &mdash;</option>{% for r in rooms %}<option value="{{ r.id }}">{{ r.name }} ({{ r.building }} - {{ r.floor }})</option>{% endfor %}</select></td>
+              <td><input name="roomno_{{ b.code }}" class="form-control form-control-sm" placeholder="e.g. A-101"></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="d-flex justify-content-end mt-3">
+        <button class="btn btn-primary btn-sm rounded-pill fw-bold px-4"><i class="fa-solid fa-upload me-1"></i> Publish for All Branches</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- ================= BRANCH-WISE TIMETABLE PREVIEW ================= -->
+  {% if branch_matrix %}
+  <div class="card campus-card border-0 shadow-sm p-3 mt-3">
+    <h6 class="fw-bold mb-3"><i class="fa-solid fa-diagram-project text-success me-2"></i>Branch-wise Timetable (what students see, column-wise)</h6>
+    {% for block in branch_matrix %}
+      <div class="mb-2"><span class="badge bg-dark rounded-pill"><i class="fa-regular fa-calendar me-1"></i>{{ block.date.strftime('%A, %d %b %Y') }}</span></div>
+      <div class="d-flex flex-nowrap overflow-auto pb-2 gap-2">
+        {% for col in block.columns %}
+        <div class="border rounded-3 p-2 flex-shrink-0" style="min-width: 210px; max-width: 240px; background: rgba(123,92,255,0.04);">
+          <div class="fw-bold text-primary border-bottom pb-1 mb-2">{{ col.branch }}</div>
+          {% for s in col.exams %}
+          <div class="small mb-2">
+            <div class="fw-bold text-dark">{{ s.subject_code }}</div>
+            <div class="text-muted">{{ s.subject_name }}</div>
+            <div><i class="fa-solid fa-door-open me-1 text-success"></i>{% if s.room_number %}{{ s.room_number }}{% else %}{{ s.room.name if s.room else 'TBA' }}{% endif %}</div>
+            <div class="text-muted"><i class="fa-regular fa-clock me-1"></i>{{ s.time_window }}</div>
+            {% if s.semester %}<div class="text-muted"><i class="fa-solid fa-user-graduate me-1"></i>{{ s.semester }}</div>{% endif %}
+          </div>
+          {% endfor %}
+        </div>
+        {% endfor %}
+      </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+
+<script>
+  // (single-entry form is students-only now; no audience toggle needed)
+</script>
+{% endblock %}

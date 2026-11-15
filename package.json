@@ -1,0 +1,22 @@
+{
+  "name": "campus360-gec-hassan",
+  "version": "1.0.0",
+  "description": "Campus 360 – Smart Campus Management System for Government Engineering College, Mosalehosahalli, Hassan",
+  "scripts": {
+    "client": "npm --prefix client run dev",
+    "server": "npm --prefix server run dev",
+    "build": "npm --prefix client run build",
+    "start": "npm --prefix server start"
+  },
+  "keywords": [
+    "campus-360",
+    "smart-campus",
+    "navigation",
+    "lost-and-found",
+    "canteen",
+    "gec-hassan"
+  ],
+  "author": "GEC Hassan & Antigravity",
+  "license": "MIT"
+}
+

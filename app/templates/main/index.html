@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Smart Campus 360 | Dashboard | GEC Mosalehosahalli</title>
+
+  <!-- Apply saved / preferred theme before paint (no flash) -->
+  <script>
+    (function () {
+      try {
+        var t = localStorage.getItem('sc360-theme');
+        if (!t) t = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        document.documentElement.setAttribute('data-theme', t);
+      } catch (e) { document.documentElement.setAttribute('data-theme', 'light'); }
+    })();
+  </script>
+
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+</head>
+<body class="sc360-body">
+
+  <div class="sc-scrim" id="scScrim"></div>
+  <!-- Decorative falling-sparkle "snow" shimmer (cosmetic, behind content) -->
+  <div class="sc-snow" id="scSnow" aria-hidden="true"></div>
+  <!-- Rotating 3D spiral galaxy behind the glass (cosmetic) -->
+  <div class="sc-galaxy" aria-hidden="true">
+    <div class="gx-stars"></div>
+    <div class="gx-disk">
+      <div class="gx-arms"></div>
+      <div class="gx-core"></div>
+    </div>
+    <div class="gx-orbit o1"><span class="gx-planet"></span></div>
+    <div class="gx-orbit o2"><span class="gx-planet"></span></div>
+    <div class="gx-orbit o3"><span class="gx-planet"></span></div>
+  </div>
+
+  <!-- ============================= SIDEBAR ============================= -->
+  <aside class="sc-sidebar">
+    <a class="sc-brand" href="{{ url_for('main.index') }}">
+      <span class="sc-brand-photo">
+        <img src="{{ url_for('static', filename='images/college_entrance.jpg') }}" alt="Government Engineering College, Mosalehosahalli - entrance front view">
+        <span class="sc-brand-3d"><i class="fa-solid fa-school"></i></span>
+      </span>
+      <span class="sc-brand-txt">
+        <strong>Smart Campus <span>360</span></strong>
+        <small>Navigate &middot; Find &middot; Book</small>
+      </span>
+    </a>
+
+    <a class="sc-nav {% if request.endpoint == 'main.index' %}active{% endif %}" href="{{ url_for('main.index') }}">
+      <i class="fa-solid fa-house"></i> Dashboard
+    </a>
+
+    <div class="sc-nav-group">
+      <button class="sc-nav" type="button" data-group-toggle>
+        <i class="fa-solid fa-location-dot"></i> Campus Navigation <i class="fa-solid fa-chevron-right sc-chev"></i>
+      </button>
+      <div class="sc-sub">
+        <a href="{{ url_for('navigation.index') }}"><i class="fa-solid fa-map"></i> Open Campus Map</a>
+        <a href="{{ url_for('navigation.exam_finder') }}"><i class="fa-solid fa-door-open"></i> Exam Room Finder</a>
+        <a href="{{ url_for('navigation.index') }}"><i class="fa-solid fa-street-view"></i> Street View POIs</a>
+      </div>
+    </div>
+
+    <div class="sc-nav-group">
+      <button class="sc-nav" type="button" data-group-toggle>
+        <i class="fa-solid fa-box-archive"></i> Lost &amp; Found <i class="fa-solid fa-chevron-right sc-chev"></i>
+      </button>
+      <div class="sc-sub">
+        <a href="{{ url_for('lost_found.index') }}"><i class="fa-solid fa-magnifying-glass"></i> Browse Items</a>
+        <a href="{{ url_for('lost_found.report_item') }}"><i class="fa-solid fa-plus"></i> Report an Item</a>
+        <a href="{{ url_for('lost_found.my_reports') }}"><i class="fa-solid fa-list-check"></i> My Reports</a>
+      </div>
+    </div>
+
+    <div class="sc-nav-group">
+      <button class="sc-nav" type="button" data-group-toggle>
+        <i class="fa-solid fa-utensils"></i> Smart Canteen <i class="fa-solid fa-chevron-right sc-chev"></i>
+      </button>
+      <div class="sc-sub">
+        <a href="{{ url_for('canteen.index') }}"><i class="fa-solid fa-bowl-food"></i> View Menu</a>
+        <a href="{{ url_for('canteen.my_orders') }}"><i class="fa-solid fa-receipt"></i> My Bookings</a>
+        <a href="{{ url_for('canteen.cart_view') }}"><i class="fa-solid fa-basket-shopping"></i> Food Tray</a>
+      </div>
+    </div>
+
+    <div class="sc-side-sep"></div>
+
+    <a class="sc-nav" href="{{ url_for('canteen.my_orders') }}"><i class="fa-solid fa-clipboard-list"></i> My Bookings</a>
+    <a class="sc-nav" href="{{ url_for('lost_found.my_reports') }}"><i class="fa-solid fa-file-lines"></i> My Reports</a>
+    <a class="sc-nav" href="{{ url_for('notifications.index') }}">
+      <i class="fa-solid fa-bell"></i> Notifications
+      {% if unread_notifications %}<span class="sc-pill">{{ unread_notifications }}</span>{% endif %}
+    </a>
+
+    <div class="sc-side-sep"></div>
+
+    <a class="sc-nav" href="{{ url_for('auth.profile') }}"><i class="fa-solid fa-user"></i> Profile</a>
+    <a class="sc-nav" href="{{ url_for('auth.settings') }}"><i class="fa-solid fa-gear"></i> Settings</a>
+    <a class="sc-nav" href="{{ url_for('main.about') }}"><i class="fa-solid fa-circle-question"></i> Help &amp; Support</a>
+
+    {% if current_user and current_user.is_main_admin() %}
+    <a class="sc-nav" href="{{ url_for('admin.dashboard') }}"><i class="fa-solid fa-shield-halved" style="color:var(--sc-rose)"></i> Main Admin Hub</a>
+    {% endif %}
+    {% if current_user and current_user.is_canteen_admin() %}
+    <a class="sc-nav" href="{{ url_for('canteen_admin.dashboard') }}"><i class="fa-solid fa-kitchen-set" style="color:var(--sc-green)"></i> Canteen Operator Hub</a>
+    {% endif %}
+
+    <a class="sc-side-photo" href="{{ COLLEGE_MAPS_URL }}" target="_blank" rel="noopener noreferrer"
+       title="Open our exact location in Google Maps">
+      <img src="{{ url_for('static', filename='images/college_gate.jpg') }}" alt="GEC Mosalehosahalli campus gate">
+      <div class="sc-cap"><i class="fa-solid fa-location-dot"></i> Government Engineering College, Hassan
+        <i class="fa-solid fa-arrow-up-right-from-square ms-auto"></i>
+      </div>
+    </a>
+  </aside>
+
+  <!-- ============================= MAIN ============================= -->
+  <div class="sc-main">
+
+    <!-- Topbar -->
+    <header class="sc-topbar">
+      <button class="sc-icon-btn sc-hamb" id="scHamb" aria-label="Toggle menu"><i class="fa-solid fa-bars"></i></button>
+      <form class="sc-search" id="scSearchForm" role="search">
+        <i class="fa-solid fa-magnifying-glass"></i>
+        <input id="scSearchInput" type="text" placeholder="Search rooms, items, food, people…" aria-label="Global search">
+      </form>
+
+      <div class="sc-top-actions">
+        <button class="sc-icon-btn" id="themeToggle" title="Toggle theme" aria-label="Toggle light or dark theme">
+          <i class="fa-solid fa-moon" id="themeIcon"></i>
+        </button>
+
+        {% if ALLOW_QUICK_SWITCH %}
+        <div class="sc-dd">
+          <button class="sc-icon-btn" data-dd-toggle title="Switch Role" aria-label="Switch Role">
+            <i class="fa-solid fa-masks-theater" style="color:var(--sc-amber)"></i>
+          </button>
+          <div class="sc-dd-menu" style="width:210px">
+            <div class="sc-dd-head"><span>Switch Role</span></div>
+            <a class="sc-dd-item" href="{{ url_for('auth.quick_switch', role='main_admin') }}"><i class="fa-solid fa-shield-halved"></i> Main Admin</a>
+            <a class="sc-dd-item" href="{{ url_for('auth.quick_switch', role='canteen_admin') }}"><i class="fa-solid fa-utensils"></i> Canteen Admin</a>
+            <a class="sc-dd-item" href="{{ url_for('auth.quick_switch', role='teacher') }}"><i class="fa-solid fa-chalkboard-user"></i> Teacher</a>
+            <a class="sc-dd-item" href="{{ url_for('auth.quick_switch', role='student') }}"><i class="fa-solid fa-user-graduate"></i> Student</a>
+            <a class="sc-dd-item" href="{{ url_for('auth.quick_switch', role='visitor') }}"><i class="fa-solid fa-street-view"></i> Visitor</a>
+          </div>
+        </div>
+        {% endif %}
+
+        {% if current_user %}
+        <div class="sc-dd">
+          <button class="sc-icon-btn" data-dd-toggle title="Notifications" aria-label="Notifications">
+            <i class="fa-solid fa-bell"></i>
+            {% if unread_notifications %}<span class="sc-dot">{{ unread_notifications }}</span>{% endif %}
+          </button>
+          <div class="sc-dd-menu">
+            <div class="sc-dd-head"><span>Notifications</span><a href="{{ url_for('notifications.index') }}" style="color:var(--sc-primary);text-decoration:none;font-size:0.78rem">View all</a></div>
+            {% for note in latest_notifications %}
+            <a class="sc-noti" href="{{ note.link_url or url_for('notifications.index') }}">
+              <span class="sc-nic"><i class="fa-solid fa-bell"></i></span>
+              <span><span class="sc-nt">{{ note.title }}</span><span class="sc-nm">{{ note.message }}</span><span class="sc-nu">{{ note.created_at.strftime('%d %b, %H:%M') if note.created_at }}</span></span>
+            </a>
+            {% else %}
+            <div style="padding:16px;text-align:center;color:var(--sc-ink-soft);font-size:0.82rem">No notifications yet.</div>
+            {% endfor %}
+          </div>
+        </div>
+
+        <div class="sc-dd">
+          <a class="sc-user" href="#" data-dd-toggle>
+            <span class="sc-avatar">{{ current_user.full_name[:1]|upper }}</span>
+            <span style="text-align:left">
+              <span class="sc-uname">{{ current_user.role.replace('_',' ')|title }}</span>
+              <span class="sc-urole">{{ (current_user.department ~ ' - ' ~ current_user.semester) if (current_user.department and current_user.semester) else (current_user.designation or current_user.email) }}</span>
+            </span>
+            <i class="fa-solid fa-chevron-down" style="font-size:0.7rem;color:var(--sc-ink-soft)"></i>
+          </a>
+          <div class="sc-dd-menu" style="width:230px">
+            <a class="sc-dd-item" href="{{ url_for('auth.profile') }}"><i class="fa-solid fa-id-card"></i> My Profile</a>
+            <a class="sc-dd-item" href="{{ url_for('canteen.my_orders') }}"><i class="fa-solid fa-receipt"></i> My Canteen Orders</a>
+            <a class="sc-dd-item" href="{{ url_for('lost_found.my_reports') }}"><i class="fa-solid fa-boxes-stacked"></i> My Lost &amp; Found</a>
+            <div class="sc-dd-sep"></div>
+            <a class="sc-dd-item danger" href="{{ url_for('auth.logout') }}"><i class="fa-solid fa-right-from-bracket"></i> Sign Out</a>
+          </div>
+        </div>
+        {% else %}
+        <a class="sc-btn light" href="{{ url_for('auth.login') }}"><i class="fa-solid fa-right-to-bracket"></i> Log In</a>
+        {% endif %}
+      </div>
+    </header>
+
+    <!-- Flash messages -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+        <div class="sc-flash {{ 'danger' if category in ('error','danger') else category }}">
+          <i class="fa-solid {% if category == 'success' %}fa-circle-check{% elif category in ('error','danger') %}fa-triangle-exclamation{% elif category == 'warning' %}fa-circle-exclamation{% else %}fa-circle-info{% endif %}"></i>{{ message }}
+        </div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    <!-- ============================= WELCOME BANNER ============================= -->
+    <section class="sc-banner reveal">
+      <img class="sc-banner-media" src="{{ url_for('static', filename='images/dashboard/campus_map.png') }}" alt="GEC Mosalehosahalli isometric campus map">
+      <div class="sc-banner-veil"></div>
+
+      <div class="sc-float date">
+        <span class="sc-fic"><i class="fa-regular fa-calendar-days"></i></span>
+        <span><small id="scDate">Loading…</small><strong id="scTime">&nbsp;</strong></span>
+      </div>
+      <a class="sc-float loc" href="{{ COLLEGE_MAPS_URL }}" target="_blank" rel="noopener noreferrer"
+         title="Open our exact location in Google Maps">
+        <img class="sc-loc-photo" src="{{ url_for('static', filename='images/college_gate.jpg') }}" alt="Government Engineering College, Mosalehosahalli gate">
+        <span><strong>{{ COLLEGE_NAME or 'Government Engineering College' }}</strong><small>{{ COLLEGE_LOCATION or 'Hassan, Karnataka' }}</small></span>
+        <span class="sc-loc-go"><i class="fa-solid fa-arrow-up-right-from-square"></i></span>
+      </a>
+
+      <div class="sc-banner-body">
+        <h1>Welcome Back{% if current_user %}, {{ current_user.full_name.split()[0] }}{% endif %}! <i class="fa-solid fa-hand" style="font-size:0.8em"></i></h1>
+        <p>Explore your campus smarter with AI-powered solutions.</p>
+        <div class="sc-banner-chips">
+          <div class="sc-bchip"><span class="sc-bic b-blue"><i class="fa-solid fa-user-graduate"></i></span><span><b>{{ stats.students_count }}</b><span>Students</span></span></div>
+          <div class="sc-bchip"><span class="sc-bic b-indigo"><i class="fa-solid fa-building-columns"></i></span><span><b>{{ stats.faculty_count }}</b><span>Faculty</span></span></div>
+          <div class="sc-bchip"><span class="sc-bic b-purple"><i class="fa-solid fa-map"></i></span><span><b>{{ stats.rooms_labs }}</b><span>Rooms &amp; Labs</span></span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================= LAYOUT: MAIN + SIDE RAIL ============================= -->
+    <div class="sc-layout">
+      <div class="sc-col-main">
+
+        <!-- Feature cards -->
+        <div class="sc-grid sc-cols-3">
+          <div class="sc-fcard reveal">
+            <div class="sc-fcard-media grad-nav">
+              <img src="{{ url_for('static', filename='images/dashboard/island_map.png') }}" alt="Campus map">
+              <span class="sc-fcard-badge b-blue"><i class="fa-solid fa-location-arrow"></i></span>
+            </div>
+            <div class="sc-fcard-body">
+              <h4>Campus Navigation</h4>
+              <p>Find classrooms, labs, HOD rooms and offices with AI-powered maps, A* routing and Street-View POIs.</p>
+              <a class="sc-btn blue block" href="{{ url_for('navigation.index') }}">Open Navigation <i class="fa-solid fa-arrow-right"></i></a>
+            </div>
+          </div>
+
+          <div class="sc-fcard reveal">
+            <div class="sc-fcard-media grad-lf">
+              <img src="{{ url_for('static', filename='images/dashboard/lf_wallet.png') }}" alt="Lost and found items">
+              <span class="sc-fcard-badge b-purple"><i class="fa-solid fa-magnifying-glass"></i></span>
+            </div>
+            <div class="sc-fcard-body">
+              <h4>Lost &amp; Found</h4>
+              <p>Report lost or found items &mdash; every lost report is sent to the whole campus, and finders notify owners directly.</p>
+              <a class="sc-btn purple block" href="{{ url_for('lost_found.report_item') }}">Report / Search Item <i class="fa-solid fa-arrow-right"></i></a>
+            </div>
+          </div>
+
+          <div class="sc-fcard reveal">
+            <div class="sc-fcard-media grad-can">
+              <img src="{{ url_for('static', filename='images/dashboard/food_biryani.png') }}" alt="Canteen meals">
+              <span class="sc-fcard-badge b-green"><i class="fa-solid fa-utensils"></i></span>
+            </div>
+            <div class="sc-fcard-body">
+              <h4>Smart Canteen</h4>
+              <p>View the menu, book food, and skip the queue with QR-code pickup and teacher-first priority.</p>
+              <a class="sc-btn green block" href="{{ url_for('canteen.index') }}">View Menu &amp; Book <i class="fa-solid fa-arrow-right"></i></a>
+            </div>
+          </div>
+        </div>
+
+        <!-- Statistics cards -->
+        <div class="sc-stats">
+          <div class="sc-glass sc-stat reveal">
+            <span class="sc-sic b-blue"><i class="fa-solid fa-map-location-dot"></i></span>
+            <div><div class="sc-snum">{{ stats.nodes_count }}</div><div class="sc-slbl">Campus Locations</div></div>
+            <svg class="sc-spark" viewBox="0 0 100 40" preserveAspectRatio="none"><polyline stroke="#3b82f6" points="0,32 18,26 36,28 54,16 72,20 100,6"/></svg>
+          </div>
+          <div class="sc-glass sc-stat reveal">
+            <span class="sc-sic b-green"><i class="fa-solid fa-box-open"></i></span>
+            <div><div class="sc-snum">{{ stats.lf_lost + stats.lf_found }}</div><div class="sc-slbl">Items Reported</div></div>
+            <svg class="sc-spark" viewBox="0 0 100 40" preserveAspectRatio="none"><polyline stroke="#10b981" points="0,30 20,24 40,26 60,14 80,18 100,8"/></svg>
+          </div>
+          <div class="sc-glass sc-stat reveal">
+            <span class="sc-sic b-amber"><i class="fa-solid fa-bowl-food"></i></span>
+            <div><div class="sc-snum">{{ stats.orders_today }}</div><div class="sc-slbl">Food Orders Today</div></div>
+            <svg class="sc-spark" viewBox="0 0 100 40" preserveAspectRatio="none"><polyline stroke="#f59e0b" points="0,34 20,30 40,22 60,24 80,12 100,10"/></svg>
+          </div>
+          <div class="sc-glass sc-stat reveal">
+            <span class="sc-sic b-purple"><i class="fa-solid fa-users"></i></span>
+            <div><div class="sc-snum">{{ stats.students_count }}</div><div class="sc-slbl">Active Students</div></div>
+            <svg class="sc-spark" viewBox="0 0 100 40" preserveAspectRatio="none"><polyline stroke="#8b5cf6" points="0,28 20,26 40,18 60,20 80,12 100,6"/></svg>
+          </div>
+        </div>
+
+        <!-- Recent + Popular -->
+        <div class="sc-two">
+          <div class="sc-glass sc-panel reveal">
+            <div class="sc-sec-title">
+              <span class="sc-ic b-blue"><i class="fa-solid fa-clock-rotate-left"></i></span>
+              <h3>Recent Lost &amp; Found</h3>
+              <a href="{{ url_for('lost_found.index') }}">View All</a>
+            </div>
+            <ul class="sc-list">
+              {% for item in recent_lost_found[:4] %}
+              <li>
+                <a class="sc-row" href="{{ url_for('lost_found.item_detail', item_id=item.id) }}">
+                  {% if item.photo_url %}<img class="sc-thumb" src="{{ item.photo_url }}" alt="{{ item.title }}">{% else %}<img class="sc-thumb" src="{{ url_for('static', filename='images/dashboard/' ~ ['wallet_black.png','phone_card.png','id_card.png','tracking.png'][loop.index0 % 4]) }}" alt="{{ item.title }}">{% endif %}
+                  <span class="sc-rt">
+                    <strong>{{ item.title }}</strong>
+                    <small>{{ 'Found at' if item.report_type == 'found' else 'Lost near' }} {{ item.location_reported }}</small>
+                  </span>
+                  <span class="sc-tag {{ item.report_type }}">{{ item.report_type|capitalize }}</span>
+                </a>
+              </li>
+              {% else %}
+              <li style="padding:14px;text-align:center;color:var(--sc-ink-soft)">No reports filed yet.</li>
+              {% endfor %}
+            </ul>
+          </div>
+
+          <div class="sc-glass sc-panel reveal">
+            <div class="sc-sec-title">
+              <span class="sc-ic b-rose"><i class="fa-solid fa-fire-burner"></i></span>
+              <h3>Popular Canteen Items</h3>
+              <a href="{{ url_for('canteen.index') }}">View Menu</a>
+            </div>
+            <ul class="sc-list">
+              {% for entry in popular_items[:4] %}
+              {% set food = entry.item %}
+              <li>
+                <a class="sc-row" href="{{ url_for('canteen.index') }}">
+                  {% if food.photo_url %}<img class="sc-thumb" src="{{ food.photo_url }}" alt="{{ food.name }}">{% else %}<img class="sc-thumb" src="{{ url_for('static', filename='images/dashboard/' ~ ['food_biryani.png','food_dosa.png','food_idli.png','food_chinese.png'][loop.index0 % 4]) }}" alt="{{ food.name }}">{% endif %}
+                  <span class="sc-rt">
+                    <strong>{{ food.name }}</strong>
+                    <small>₹{{ '%.0f'|format(food.price) }} &middot; {{ food.preparation_time_mins }} min</small>
+                  </span>
+                  {% if loop.index == 1 %}<span class="sc-tag hot"><i class="fa-solid fa-fire"></i> Most Ordered</span>
+                  {% elif loop.index == 2 %}<span class="sc-tag pop">Popular</span>
+                  {% else %}<span class="sc-tag healthy">Available</span>{% endif %}
+                </a>
+              </li>
+              {% else %}
+              <li style="padding:14px;text-align:center;color:var(--sc-ink-soft)">Menu is currently empty.</li>
+              {% endfor %}
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============================= RIGHT RAIL ============================= -->
+      <aside class="sc-col-side">
+        <div class="sc-glass sc-panel reveal">
+          <div class="sc-sec-title">
+            <span class="sc-ic b-indigo"><i class="fa-solid fa-calendar-day"></i></span>
+            <h3>Today's Events</h3>
+            <a href="{{ url_for('main.about') }}">View All</a>
+          </div>
+          <ul class="sc-tl">
+            {% for ev in today_events %}
+            <li class="c-{{ ev.color }}">
+              <span class="sc-tlt">{{ ev.time }}</span>
+              <span class="sc-tldot"></span>
+              <span class="sc-tlbody"><strong>{{ ev.title }}</strong><small>{{ ev.place }}</small></span>
+            </li>
+            {% else %}
+            <li style="padding:6px 0 0;color:var(--sc-ink-soft);font-size:0.84rem">No activity recorded yet today.</li>
+            {% endfor %}
+          </ul>
+        </div>
+
+        <div class="sc-glass sc-panel sc-qfind reveal">
+          <div class="sc-sec-title">
+            <span class="sc-ic b-blue"><i class="fa-solid fa-location-crosshairs"></i></span>
+            <h3>Quick Location Finder</h3>
+          </div>
+          <select class="sc-select" id="qfindSelect" aria-label="Select a location">
+            <option value="">Select a location</option>
+            {% for loc in quick_locations %}
+            <option value="{{ loc.id }}">{{ loc.name }} — {{ loc.building }}</option>
+            {% endfor %}
+          </select>
+          <div class="sc-qmap">
+            <img src="{{ url_for('static', filename='images/dashboard/campus_map.png') }}" alt="Campus map preview">
+            <i class="fa-solid fa-location-dot sc-qpin"></i>
+          </div>
+          <a class="sc-btn sky block" id="qfindGo" href="{{ url_for('navigation.index') }}">Get Directions <i class="fa-solid fa-arrow-right"></i></a>
+        </div>
+      </aside>
+    </div>
+
+    <footer style="margin-top:30px;text-align:center;color:var(--sc-ink-soft);font-size:0.78rem">
+      &copy; 2026 Government Engineering College, Mosalehosahalli &middot; Smart Campus 360 &middot;
+      <a href="{{ url_for('main.about') }}" style="color:var(--sc-primary);text-decoration:none">About &amp; Technical Specs</a>
+    </footer>
+
+  </div><!-- /sc-main -->
+
+  <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+</body>
+</html>
