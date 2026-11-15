@@ -187,24 +187,16 @@ The application is pre-configured with a dual database connector:
    - You can also explicitly set `USE_SQLITE=True` in `.env`.
 
 ### Step 4: Run the Application
-Start the Flask development server:
+Start the full application (React frontend and Express API):
 ```powershell
 python run.py
 ```
-Output will confirm:
-```
-======================================================================
-  SMART CAMPUS 360 - INITIALIZING INTEGRATED PLATFORM
-  Institution: Government Engineering College, Mosalehosahalli
-  Location:    Hassan, Karnataka, India
-======================================================================
-  [✓] Module 1: Smart Campus Navigation (A*/Dijkstra & Street View)
-  [✓] Module 2: AI Lost & Found (OpenCV Visual Similarity)
-  [✓] Module 3: Smart Canteen (Teacher-First Priority & QR Codes)
-  [✓] Server Running at: http://127.0.0.1:5000/
-======================================================================
-```
-Open **`http://localhost:5000`** in your browser (Chrome, Edge, or Firefox).
+
+On a fresh clone, `run.py` installs the locked Node.js dependencies for the
+frontend and API if they are missing. This requires Node.js and npm to be
+installed. Open **`http://localhost:5173/`** in your browser; the frontend
+connects to the API on port 5000. Keep the terminal open while using the app,
+and press **Ctrl+C** to stop both services.
 
 ---
 

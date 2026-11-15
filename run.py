@@ -70,6 +70,20 @@ def cleanup_and_exit(signum=None, frame=None):
     print("  [✔] All processes stopped. Goodbye!\n")
     sys.exit(0)
 
+def ensure_npm_dependencies(npm_cmd):
+    packages = [
+        ("client", os.path.join(CLIENT_DIR, "node_modules", "vite", "bin", "vite.js")),
+        ("server", os.path.join(SERVER_DIR, "node_modules", "express", "index.js")),
+    ]
+    for package_dir, entry_point in packages:
+        if not os.path.isfile(entry_point):
+            print(f"  [*] Installing {package_dir} dependencies from package-lock.json...")
+            subprocess.run(
+                [npm_cmd, "ci", "--prefix", package_dir],
+                cwd=PROJECT_ROOT,
+                check=True
+            )
+
 def main():
     signal.signal(signal.SIGINT, cleanup_and_exit)
     signal.signal(signal.SIGTERM, cleanup_and_exit)
@@ -94,6 +108,7 @@ def main():
     # Command executables
     node_cmd = "node"
     npm_cmd = "npm.cmd" if sys.platform == "win32" else "npm"
+    ensure_npm_dependencies(npm_cmd)
 
     # Start Backend: Node.js Express server
     print("  [*] Starting Backend Service (Express on port 5000)...")
