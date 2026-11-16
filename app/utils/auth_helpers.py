@@ -2,6 +2,12 @@ from functools import wraps
 from flask import session, redirect, url_for, flash, request
 from app.models import User, AuditLog
 
+ADMIN_ROLE_SCOPES = {
+    'lost_found_admin': 'lost_found',
+    'navigation_admin': 'navigation',
+    'canteen_admin': 'canteen',
+}
+
 def get_current_user():
     """
     Retrieves the current authenticated user from session.
@@ -72,7 +78,13 @@ def role_required(allowed_roles):
             if user.role == 'main_admin':
                 return f(*args, **kwargs)
 
-            if user.role not in allowed_roles:
+            has_role = user.role in allowed_roles
+            has_scoped_role = any(
+                user.admin_scope == ADMIN_ROLE_SCOPES[role]
+                for role in allowed_roles
+                if role in ADMIN_ROLE_SCOPES
+            )
+            if not has_role and not has_scoped_role:
                 # Phase 2 SECURITY: audit every failed authorization attempt
                 AuditLog.log(
                     action='ACCESS_DENIED_ROLE',

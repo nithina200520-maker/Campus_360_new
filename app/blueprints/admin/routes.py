@@ -24,6 +24,17 @@ EXAM_DAY_PARTS = ('Morning', 'Afternoon', 'Evening')
 # truth lives in ExamSchedule.BRANCH_CATALOG).
 EXAM_BRANCHES = ExamSchedule.BRANCH_ORDER
 
+def _deny_scoped_admin_access(user, module):
+    AuditLog.log(
+        action='ACCESS_DENIED_ROLE',
+        module=module.upper(),
+        user_id=user.id,
+        details=f"User '{user.email}' (admin_scope={user.admin_scope}) was denied access to {module} administration.",
+        ip_address=request.remote_addr
+    )
+    flash("Access denied: this data belongs to a different administration module.", "danger")
+    return redirect(url_for('main.index'))
+
 NODE_CSV_TEMPLATE = """node_code,name,building,floor,category,description,x_coord,y_coord,photo_url,is_panoramic,is_accessible,is_sample_data
 NODE_EXAMPLE_1,Sample Classroom 101,Academic Block A,Ground Floor,Classroom,Imported via Phase 3 template,420,300,,False,True,True
 NODE_EXAMPLE_2,Sample Corridor A,Academic Block A,Ground Floor,Corridor,Corridor connecting rooms,360,300,/static/uploads/navigation/corridor.jpg,False,True,True
@@ -272,6 +283,8 @@ def change_user_role(user_id):
     if new_role in ['main_admin', 'canteen_admin', 'teacher', 'student', 'visitor']:
         old_role = target_user.role
         target_user.role = new_role
+        if old_role != new_role:
+            target_user.admin_scope = None
         # If changing to teacher, set verified to False unless already verified
         if new_role == 'teacher' and old_role != 'teacher':
             target_user.is_verified = False
@@ -289,6 +302,42 @@ def change_user_role(user_id):
     else:
         flash("Invalid role specified.", "danger")
 
+    return redirect(request.referrer or url_for('admin.users_list'))
+
+@admin_bp.route('/users/<int:user_id>/admin-scope', methods=['POST'])
+@role_required('main_admin')
+def change_user_admin_scope(user_id):
+    """Assign or revoke one module-specific admin role without replacing the base role."""
+    admin_user = get_current_user()
+    target_user = User.query.get_or_404(user_id)
+    scope = request.form.get('admin_scope', '').strip().lower()
+    valid_scopes = {'', 'lost_found', 'navigation', 'canteen'}
+
+    if scope not in valid_scopes:
+        flash("Invalid module admin role.", "danger")
+        return redirect(request.referrer or url_for('admin.users_list'))
+
+    if scope and target_user.role not in ('student', 'teacher'):
+        flash("Module admin access can only be assigned to a student or faculty account.", "warning")
+        return redirect(request.referrer or url_for('admin.users_list'))
+
+    if scope == 'lost_found' and target_user.role != 'teacher':
+        flash("Lost & Found Admin access can only be assigned to faculty accounts.", "warning")
+        return redirect(request.referrer or url_for('admin.users_list'))
+
+    previous_scope = target_user.admin_scope
+    target_user.admin_scope = scope or None
+    db.session.commit()
+
+    AuditLog.log(
+        action='USER_ADMIN_SCOPE_CHANGED',
+        module='ADMIN',
+        user_id=target_user.id,
+        details=f"Main Admin '{admin_user.full_name}' changed module admin scope for "
+                f"'{target_user.email}' from '{previous_scope or 'none'}' to '{scope or 'none'}'.",
+        ip_address=request.remote_addr
+    )
+    flash(f"Module admin access updated for {target_user.full_name}.", "success")
     return redirect(request.referrer or url_for('admin.users_list'))
 
 @admin_bp.route('/create-canteen-admin', methods=['GET', 'POST'])
@@ -377,7 +426,7 @@ def audit_logs():
 # ---------------------------------------------------------------------------
 
 @admin_bp.route('/navigation/manage')
-@role_required('main_admin')
+@role_required(['main_admin', 'navigation_admin'])
 def manage_navigation():
     """Main Admin map manager: buildings, floors, rooms, navigation points, photos and paths."""
     user = get_current_user()
@@ -400,7 +449,7 @@ def manage_navigation():
     )
 
 @admin_bp.route('/navigation/node/create', methods=['POST'])
-@role_required('main_admin')
+@role_required(['main_admin', 'navigation_admin'])
 def create_nav_node():
     """Adds a navigation point (classroom, lab, HOD office, corridor, staircase...) with optional photo."""
     user = get_current_user()
@@ -448,7 +497,7 @@ def create_nav_node():
     return redirect(url_for('admin.manage_navigation'))
 
 @admin_bp.route('/navigation/node/<int:node_id>/delete', methods=['POST'])
-@role_required('main_admin')
+@role_required(['main_admin', 'navigation_admin'])
 def delete_nav_node(node_id):
     node = NavigationNode.query.get_or_404(node_id)
     code, name = node.node_code, node.name
@@ -460,7 +509,7 @@ def delete_nav_node(node_id):
     return redirect(url_for('admin.manage_navigation'))
 
 @admin_bp.route('/navigation/node/<int:node_id>/update', methods=['POST'])
-@role_required('main_admin')
+@role_required(['main_admin', 'navigation_admin'])
 def update_nav_node(node_id):
     """PHASE 8: update room information, photograph and map position of a published point."""
     user = get_current_user()
@@ -495,7 +544,7 @@ def update_nav_node(node_id):
     return redirect(url_for('admin.manage_navigation'))
 
 @admin_bp.route('/navigation/node/<int:node_id>/toggle-publish', methods=['POST'])
-@role_required('main_admin')
+@role_required(['main_admin', 'navigation_admin'])
 def toggle_nav_node_publish(node_id):
     """PHASE 8: publish / unpublish a campus location. Unpublished points vanish from
     the public map, node APIs and route finding until Main Admin publishes them."""
@@ -511,7 +560,7 @@ def toggle_nav_node_publish(node_id):
     return redirect(request.referrer or url_for('admin.manage_navigation'))
 
 @admin_bp.route('/navigation/edge/create', methods=['POST'])
-@role_required('main_admin')
+@role_required(['main_admin', 'navigation_admin'])
 def create_nav_edge():
     """Defines a walkable connection between two navigation points."""
     source_id = request.form.get('source_node_id', type=int)
@@ -549,7 +598,7 @@ def create_nav_edge():
     return redirect(url_for('admin.manage_navigation'))
 
 @admin_bp.route('/navigation/edge/<int:edge_id>/delete', methods=['POST'])
-@role_required('main_admin')
+@role_required(['main_admin', 'navigation_admin'])
 def delete_nav_edge(edge_id):
     edge = NavigationEdge.query.get_or_404(edge_id)
     db.session.delete(edge)
@@ -560,7 +609,7 @@ def delete_nav_edge(edge_id):
     return redirect(url_for('admin.manage_navigation'))
 
 @admin_bp.route('/navigation/edge/<int:edge_id>/update', methods=['POST'])
-@role_required('main_admin')
+@role_required(['main_admin', 'navigation_admin'])
 def update_nav_edge(edge_id):
     """Photo Route Guide: edit an existing connection's endpoints, distance (m) and direction."""
     user = get_current_user()
@@ -603,7 +652,7 @@ def update_nav_edge(edge_id):
     return redirect(url_for('admin.manage_navigation'))
 
 @admin_bp.route('/navigation/floorplan/create', methods=['POST'])
-@role_required('main_admin')
+@role_required(['main_admin', 'navigation_admin'])
 def create_floor_plan():
     """Main Admin uploads a digital floor plan image for a building/floor."""
     building = request.form.get('building', '').strip()
@@ -636,7 +685,7 @@ def create_floor_plan():
     return redirect(url_for('admin.manage_navigation'))
 
 @admin_bp.route('/navigation/floorplan/<int:plan_id>/delete', methods=['POST'])
-@role_required('main_admin')
+@role_required(['main_admin', 'navigation_admin'])
 def delete_floor_plan(plan_id):
     plan = CampusFloorPlan.query.get_or_404(plan_id)
     title = plan.title
@@ -648,9 +697,13 @@ def delete_floor_plan(plan_id):
     return redirect(url_for('admin.manage_navigation'))
 
 @admin_bp.route('/navigation/template/<kind>')
-@role_required('main_admin')
+@role_required(['main_admin', 'navigation_admin'])
 def download_import_template(kind):
     """Serves CSV import templates for nodes, edges and floor plans."""
+    user = get_current_user()
+    if kind == 'exams' and user.role != 'main_admin':
+        return _deny_scoped_admin_access(user, 'exam')
+
     templates = {
         'nodes': ('navigation_nodes_template.csv', NODE_CSV_TEMPLATE),
         'edges': ('navigation_edges_template.csv', EDGE_CSV_TEMPLATE),
@@ -669,11 +722,14 @@ def _csv_row_to_bool(value, default=False):
 
 @admin_bp.route('/navigation/import', methods=['POST'])
 @admin_bp.route('/navigation/import/<kind>', methods=['POST'])
-@role_required('main_admin')
+@role_required(['main_admin', 'navigation_admin'])
 def import_navigation_data(kind=None):
     """Bulk-imports campus data (nodes / edges / floor plans) from an uploaded CSV file."""
     user = get_current_user()
     kind = kind or request.form.get('kind', 'nodes')
+    if kind == 'exams' and user.role != 'main_admin':
+        return _deny_scoped_admin_access(user, 'exam')
+
     file = request.files.get('csv_file')
     if not file or not file.filename.lower().endswith('.csv'):
         flash("A .csv file is required for data import.", "danger")
@@ -766,7 +822,7 @@ def import_navigation_data(kind=None):
 # ---------------------------------------------------------------------------
 
 @admin_bp.route('/lost-found')
-@role_required('main_admin')
+@role_required(['main_admin', 'lost_found_admin'])
 def manage_lost_found():
     """Main Admin Lost & Found command center: reports, claims queue, notification history."""
     user = get_current_user()
@@ -774,9 +830,12 @@ def manage_lost_found():
     query = LostFoundItem.query.order_by(LostFoundItem.date_time_reported.desc())
     if status_f in ('open', 'matched', 'claimed', 'closed'):
         query = query.filter_by(status=status_f)
-    items = query.limit(200).all()
+    items = query.all()
     pending_claims = LostFoundClaim.query.filter_by(status='pending').order_by(LostFoundClaim.created_at.desc()).all()
     recent_notifications = Notification.query.order_by(Notification.created_at.desc()).limit(60).all()
+    reporters = User.query.filter(
+        User.is_active.is_(True), User.role.in_(('student', 'teacher'))
+    ).order_by(User.full_name.asc()).all()
     stats = {
         'open': LostFoundItem.query.filter_by(status='open').count(),
         'claimed': LostFoundItem.query.filter_by(status='claimed').count(),
@@ -786,10 +845,99 @@ def manage_lost_found():
     }
     return render_template('admin/lost_found.html', user=user, items=items,
                            pending_claims=pending_claims, notifications=recent_notifications,
-                           stats=stats, current_status=status_f)
+                           reporters=reporters, stats=stats, current_status=status_f)
+
+@admin_bp.route('/lost-found/item/create', methods=['POST'])
+@role_required(['main_admin', 'lost_found_admin'])
+def lf_create_item():
+    """Create a Lost & Found report for an active, registered campus member."""
+    admin = get_current_user()
+    reporter_id = request.form.get('reporter_id', type=int)
+    reporter = User.query.filter(
+        User.id == reporter_id,
+        User.is_active.is_(True),
+        User.role.in_(('student', 'teacher'))
+    ).first() if reporter_id else None
+    report_type = request.form.get('report_type', '').strip().lower()
+    title = request.form.get('title', '').strip()
+    category = request.form.get('category', '').strip()
+    location = request.form.get('location_reported', '').strip()
+    description = request.form.get('description', '').strip()
+    valid_categories = {
+        'Electronics', 'ID Cards & Docs', 'Books & Stationery',
+        'Personal Items', 'Valuables', 'Other'
+    }
+
+    if not reporter:
+        flash("Choose an active student or faculty member as the report owner.", "warning")
+        return redirect(url_for('admin.manage_lost_found'))
+    if report_type not in ('lost', 'found') or not title or not location or not description:
+        flash("Report type, title, location, and description are required.", "warning")
+        return redirect(url_for('admin.manage_lost_found'))
+    if category not in valid_categories:
+        flash("Choose a valid Lost & Found category.", "warning")
+        return redirect(url_for('admin.manage_lost_found'))
+
+    item = LostFoundItem(
+        user_id=reporter.id,
+        report_type=report_type,
+        title=title,
+        category=category,
+        location_reported=location,
+        description=description,
+        contact_phone=request.form.get('contact_phone', '').strip() or reporter.phone,
+        date_time_reported=datetime.utcnow(),
+        status='open'
+    )
+    db.session.add(item)
+    db.session.commit()
+    AuditLog.log(
+        action='LF_ADMIN_REPORT_CREATED',
+        module='LOST_FOUND',
+        user_id=admin.id,
+        details=f"{admin.full_name} created a {report_type.upper()} report '{title}' for {reporter.email}.",
+        ip_address=request.remote_addr
+    )
+    flash(f"Lost & Found report '{title}' created.", "success")
+    return redirect(url_for('admin.manage_lost_found'))
+
+@admin_bp.route('/lost-found/item/<int:item_id>/edit', methods=['POST'])
+@role_required(['main_admin', 'lost_found_admin'])
+def lf_edit_item(item_id):
+    """Update descriptive Lost & Found record information."""
+    admin = get_current_user()
+    item = LostFoundItem.query.get_or_404(item_id)
+    title = request.form.get('title', '').strip()
+    category = request.form.get('category', '').strip()
+    location = request.form.get('location_reported', '').strip()
+    description = request.form.get('description', '').strip()
+    valid_categories = {
+        'Electronics', 'ID Cards & Docs', 'Books & Stationery',
+        'Personal Items', 'Valuables', 'Other'
+    }
+
+    if not title or not location or not description or category not in valid_categories:
+        flash("Title, category, location, and description are required.", "warning")
+        return redirect(url_for('admin.manage_lost_found'))
+
+    item.title = title
+    item.category = category
+    item.location_reported = location
+    item.description = description
+    item.contact_phone = request.form.get('contact_phone', '').strip() or None
+    db.session.commit()
+    AuditLog.log(
+        action='LF_ADMIN_REPORT_UPDATED',
+        module='LOST_FOUND',
+        user_id=admin.id,
+        details=f"{admin.full_name} updated report #{item.id} '{item.title}'.",
+        ip_address=request.remote_addr
+    )
+    flash(f"Lost & Found report '{title}' updated.", "success")
+    return redirect(url_for('admin.manage_lost_found'))
 
 @admin_bp.route('/lost-found/item/<int:item_id>/update-location', methods=['POST'])
-@role_required('main_admin')
+@role_required(['main_admin', 'lost_found_admin'])
 def lf_update_location(item_id):
     user = get_current_user()
     item = LostFoundItem.query.get_or_404(item_id)
@@ -809,7 +957,7 @@ def lf_update_location(item_id):
     return redirect(url_for('admin.manage_lost_found'))
 
 @admin_bp.route('/lost-found/item/<int:item_id>/verify', methods=['POST'])
-@role_required('main_admin')
+@role_required(['main_admin', 'lost_found_admin'])
 def lf_verify_item(item_id):
     """Authorized verification that a found item is genuine and in campus custody."""
     user = get_current_user()
@@ -827,7 +975,7 @@ def lf_verify_item(item_id):
     return redirect(url_for('admin.manage_lost_found'))
 
 @admin_bp.route('/lost-found/claim/<int:claim_id>/decision', methods=['POST'])
-@role_required('main_admin')
+@role_required(['main_admin', 'lost_found_admin'])
 def lf_claim_decision(claim_id):
     """Approve or reject an ownership claim (dispute resolution). Similarity score is never proof."""
     user = get_current_user()
@@ -872,7 +1020,7 @@ def lf_claim_decision(claim_id):
     return redirect(url_for('admin.manage_lost_found'))
 
 @admin_bp.route('/lost-found/item/<int:item_id>/record-return', methods=['POST'])
-@role_required('main_admin')
+@role_required(['main_admin', 'lost_found_admin'])
 def lf_record_return(item_id):
     """Track the physical handover: mark item collected and returned to its owner."""
     user = get_current_user()
@@ -904,7 +1052,7 @@ def lf_record_return(item_id):
     return redirect(url_for('admin.manage_lost_found'))
 
 @admin_bp.route('/lost-found/notify/<int:user_id>', methods=['POST'])
-@role_required('main_admin')
+@role_required(['main_admin', 'lost_found_admin'])
 def lf_send_notification(user_id):
     """Send a single targeted in-app notification (never a broadcast)."""
     admin = get_current_user()

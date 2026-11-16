@@ -8,8 +8,9 @@ import { getDbConnection, mockData } from './db.js';
 dotenv.config();
 
 const app = express();
-const PORT = process.env.SERVER_PORT || 5000;
-const JWT_SECRET = process.env.JWT_SECRET || 'gec_hassan_campus360_jwt_secure_secret_2026';
+const PORT = process.env.SERVER_PORT || 5001;
+const JWT_SECRET = process.env.JWT_SECRET || process.env.SECRET_KEY || 'smart-campus-360-default-dev-secret-key-gec-hassan';
+const SHARED_AUTH_API_URL = process.env.SHARED_AUTH_API_URL || 'http://127.0.0.1:5000';
 
 app.use(cors());
 app.use(express.json());
@@ -60,191 +61,52 @@ export const requireRole = (allowedRoles) => {
 // 1. AUTHENTICATION & REGISTRATION APIs
 // ==========================================
 
-/**
- * STEP 2: New User Registration
- * Validates against authorized college records.
- * Strictly prevents public admin registration.
- */
 app.post('/api/auth/register', async (req, res) => {
-  try {
-    const { 
-      role, 
-      fullName, 
-      usn, 
-      facultyId, 
-      email, 
-      phone, 
-      department, 
-      semester, 
-      password, 
-      confirmPassword 
-    } = req.body;
-
-    // Security Check for Admin registration: Requires authorized administrative key
-    if (role === 'admin') {
-      const { adminKey } = req.body;
-      const validAdminKey = process.env.ADMIN_MASTER_KEY || 'GEC-ADMIN-ROOT-2026';
-      if (!adminKey || adminKey.trim() !== validAdminKey) {
-        return res.status(403).json({
-          success: false,
-          message: 'Security Policy: Administrator accounts must be provisioned securely with an authorized College Master Key. Unauthorized registration rejected.'
-        });
-      }
-    }
-
-    if (role !== 'student' && role !== 'faculty' && role !== 'admin') {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid role selection. Please choose Student, Faculty, or Admin registration.'
-      });
-    }
-
-    // Required field validation
-    const primaryId = (role === 'student' ? usn : role === 'faculty' ? facultyId : email)?.trim().toUpperCase();
-    if (!fullName?.trim() || !primaryId || !email?.trim() || !password || !confirmPassword) {
-      return res.status(400).json({
-        success: false,
-        message: 'All required fields must be completed. Please fill in all information.'
-      });
-    }
-
-    // Password Match and Complexity Check
-    if (password !== confirmPassword) {
-      return res.status(400).json({
-        success: false,
-        message: 'Password and Confirm Password must match.'
-      });
-    }
-
-    if (password.length < 6) {
-      return res.status(400).json({
-        success: false,
-        message: 'Password must meet minimum security requirements (at least 6 characters).'
-      });
-    }
-
-    // Email validation (Accepts personal or college email format)
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email.trim())) {
-      return res.status(400).json({
-        success: false,
-        message: 'Please provide a valid email address.'
-      });
-    }
-
-    // Institutional Record Validation: Validate format & college master record
-    if (role === 'student') {
-      // Karnataka VTU USN standard format for GEC Hassan (Must start with 4HG)
-      if (!primaryId.startsWith('4HG')) {
-        return res.status(400).json({
-          success: false,
-          message: 'Student USN must start with authorized college code 4HG (e.g. 4HG22CS010).'
-        });
-      }
-
-      // Complete VTU format check: 4HG + 2 digits (year) + 2 letters (branch) + 3 digits (roll)
-      const vtuRegex = /^4HG\d{2}[A-Z]{2}\d{3}$/;
-      if (!vtuRegex.test(primaryId)) {
-        return res.status(400).json({
-          success: false,
-          message: 'Invalid Student USN format. Must follow standard VTU pattern (e.g. 4HG22CS010).'
-        });
-      }
-    } else if (role === 'faculty') {
-      // GEC Hassan Faculty ID format
-      if (!primaryId.startsWith('GEC-FAC-') && !primaryId.startsWith('FAC')) {
-        return res.status(400).json({
-          success: false,
-          message: 'Institutional Validation Failed: Faculty ID must follow the GEC Hassan format (e.g., GEC-FAC-101).'
-        });
-      }
-    }
-
-    // Check duplicate account in DB / in-memory store
-    const pool = await getDbConnection();
-    if (pool) {
-      try {
-        const [existing] = await pool.query(
-          'SELECT id FROM users WHERE usn_or_id = ? OR email = ? LIMIT 1',
-          [primaryId, email.trim().toLowerCase()]
-        );
-        if (existing.length > 0) {
-          return res.status(409).json({
-            success: false,
-            message: `Account already exists: An account with this ${role === 'student' ? 'USN' : role === 'faculty' ? 'Faculty ID' : 'Email'} is already registered. Please proceed to Login.`
-          });
-        }
-      } catch (err) {
-        console.error('MySQL query error:', err.message);
-      }
-    }
-
-    // Also check in-memory fallback for duplicate
-    const memoryExisting = mockData.users.find(
-      u => u.usn_or_id.toLowerCase() === primaryId.toLowerCase() || u.email.toLowerCase() === email.trim().toLowerCase()
-    );
-    if (memoryExisting) {
-      return res.status(409).json({
-        success: false,
-        message: `Account already exists: An account with this ${role === 'student' ? 'USN' : role === 'faculty' ? 'Faculty ID' : 'Email'} is already registered. Please proceed to Login.`
-      });
-    }
-
-    // Auto-enrich department and semester from authorized college master records if available
-    const matchRecord = mockData.authorizedRecords.find(r => r.id.toLowerCase() === primaryId.toLowerCase());
-    const enrichedDept = matchRecord ? matchRecord.dept : (department || (role === 'admin' ? 'College Administration' : 'Computer Science & Engineering'));
-    const enrichedSem = role === 'student' ? (semester || '5th Sem') : null;
-
-    // Hash password securely with bcrypt
-    const password_hash = await bcrypt.hash(password, 10);
-
-    // Create user object
-    const newUser = {
-      id: Date.now(),
-      full_name: fullName.trim(),
-      usn_or_id: primaryId,
-      email: email.trim().toLowerCase(),
-      phone: phone ? phone.trim() : '9845012345',
-      password_hash,
-      role,
-      department: enrichedDept,
-      semester: enrichedSem,
-      status: 'active',
-      created_at: new Date().toISOString()
-    };
-
-    // Save to MySQL if available
-    if (pool) {
-      try {
-        await pool.query(
-          `INSERT INTO users (full_name, usn_or_id, email, phone, password_hash, role, department, semester, status) 
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active')`,
-          [newUser.full_name, newUser.usn_or_id, newUser.email, newUser.phone, newUser.password_hash, newUser.role, newUser.department, newUser.semester]
-        );
-      } catch (err) {
-        console.error('MySQL insert error:', err.message);
-      }
-    }
-
-    // Always keep in mockData so both DB & memory remain synchronized
-    mockData.users.push(newUser);
-
-    return res.status(201).json({
-      success: true,
-      message: 'Registration Successful! Your details have been verified and authorized against Government Engineering College records. Redirecting to Login...',
-      user: {
-        id: newUser.id,
-        name: newUser.full_name,
-        usnOrId: newUser.usn_or_id,
-        email: newUser.email,
-        role: newUser.role,
-        department: newUser.department
-      }
+  const { role, fullName, usn, universityUSN, facultyId, employeeId, email, phone, phoneNumber, department, semester, currentSemester, academicDesignation, designation, password, confirmPassword } = req.body;
+  if (role !== 'student' && role !== 'faculty') {
+    return res.status(403).json({
+      success: false,
+      message: 'Only Student and Faculty accounts can be registered publicly. Admin accounts must be assigned privately.'
     });
+  }
 
+  const endpoint = role === 'student' ? '/api/students/register' : '/api/faculty/register';
+  const payload = {
+    fullName,
+    email,
+    phoneNumber: phoneNumber || phone,
+    department,
+    password,
+    confirmPassword,
+    ...(role === 'student'
+      ? { universityUSN: universityUSN || usn, currentSemester: currentSemester || semester }
+      : { employeeId: employeeId || facultyId, academicDesignation: academicDesignation || designation }),
+  };
+
+  try {
+    const response = await fetch(`${SHARED_AUTH_API_URL}${endpoint}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const responseText = await response.text();
+    let data;
+    try {
+      data = responseText ? JSON.parse(responseText) : {};
+    } catch {
+      console.error(`Shared registration service returned a non-JSON response (${response.status}).`);
+      return res.status(502).json({
+        success: false,
+        message: 'Registration service returned an unexpected response. Restart the Flask auth service and try again.',
+      });
+    }
+    return res.status(response.status).json(data);
   } catch (err) {
-    console.error('Registration handler error:', err);
-    return res.status(500).json({ success: false, message: 'Server error during registration. Please try again.' });
+    console.error('Shared registration service unavailable:', err.message);
+    return res.status(503).json({
+      success: false,
+      message: 'Shared registration service is unavailable. Please try again shortly.',
+    });
   }
 });
 
@@ -255,16 +117,32 @@ app.post('/api/auth/register', async (req, res) => {
  */
 app.post('/api/auth/login', async (req, res) => {
   try {
-    const { role, identifier, password } = req.body;
+    const { role, identifier, usnOrId, password } = req.body;
+    const loginIdentifier = identifier || usnOrId;
 
-    if (!role || !identifier || !password) {
+    if (!role || !loginIdentifier || !password) {
       return res.status(400).json({ 
         success: false, 
         message: 'Please provide role, identifier, and password.' 
       });
     }
 
-    const cleanIdentifier = identifier.trim();
+    if (role === 'student' || role === 'faculty') {
+      const endpoint = role === 'student' ? '/api/students/login' : '/api/faculty/login';
+      const response = await fetch(`${SHARED_AUTH_API_URL}${endpoint}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ identifier: loginIdentifier, password }),
+      });
+      const data = await response.json();
+      return res.status(response.status).json(data);
+    }
+
+    if (role !== 'admin') {
+      return res.status(400).json({ success: false, message: 'Unsupported account type.' });
+    }
+
+    const cleanIdentifier = loginIdentifier.trim();
 
     // Validation for Student role: Check USN format if identifier looks like a USN
     if (role === 'student') {

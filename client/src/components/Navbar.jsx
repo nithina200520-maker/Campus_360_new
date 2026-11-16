@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { Compass, Box, UtensilsCrossed, Bell, User, LogOut, Shield, ChevronRight, ArrowLeft, LayoutDashboard, Briefcase, X, CheckCircle2 } from 'lucide-react';
+import { Compass, Box, UtensilsCrossed, Bell, User, LogOut, Shield, ChevronRight, ArrowLeft, LayoutDashboard, Briefcase, X, CheckCircle2, MapPin } from 'lucide-react';
 
 export default function Navbar({ currentPage, setCurrentPage, currentUser, onLogout, onBack, canGoBack }) {
   const [showNotifications, setShowNotifications] = useState(false);
+  const [showCollegeLocation, setShowCollegeLocation] = useState(false);
   const [unreadCount, setUnreadCount] = useState(3);
 
   const notifications = [
@@ -145,6 +146,60 @@ export default function Navbar({ currentPage, setCurrentPage, currentUser, onLog
 
         {/* Right side user / login action */}
         <div className="flex items-center gap-3">
+          <div className="relative">
+            <button
+              onClick={() => setShowCollegeLocation(!showCollegeLocation)}
+              className="flex items-center justify-center p-2 rounded-xl bg-[#0c1830] border border-cyan-500/20 text-cyan-300 hover:border-cyan-400/50 hover:bg-cyan-950/60 transition-all cursor-pointer"
+              title="College location"
+              aria-label="Show college location"
+              aria-expanded={showCollegeLocation}
+            >
+              <MapPin className="w-4 h-4" />
+            </button>
+
+            {showCollegeLocation && (
+              <div
+                role="dialog"
+                aria-label="College location"
+                className="absolute right-0 top-12 w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-2xl bg-[#08152e] border border-cyan-400/40 shadow-[0_0_35px_rgba(0,242,254,0.25)] z-50"
+              >
+                <img
+                  src="/images/gec-campus-location.png"
+                  alt="Government Engineering College, Mosalehosahalli campus entrance"
+                  className="h-40 w-full object-cover"
+                />
+                <div className="p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <h2 className="text-sm font-bold text-white">
+                        Government Engineering College
+                      </h2>
+                      <p className="mt-1 text-xs text-slate-300">
+                        Mosalehosahalli, Hassan District - 573212, Karnataka, India
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => setShowCollegeLocation(false)}
+                      className="p-1 text-slate-400 hover:text-white"
+                      aria-label="Close college location"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <a
+                    href="https://maps.app.goo.gl/JJK7ZtEin9gwYk7V8"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-4 flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 px-4 py-2 text-xs font-bold text-white hover:brightness-110 transition"
+                  >
+                    <MapPin className="w-4 h-4" />
+                    Open exact location in Google Maps
+                  </a>
+                </div>
+              </div>
+            )}
+          </div>
+
           {currentUser ? (
             <div className="flex items-center gap-3 relative">
               {/* Notification Bell Button */}

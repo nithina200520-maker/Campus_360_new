@@ -76,7 +76,7 @@ class TestSinglePlatformCore:
 
     def test_single_backend_app_registers_all_blueprints_once(self, app):
         names = sorted(app.blueprints.keys())
-        assert names == ["admin", "auth", "canteen", "canteen_admin", "lost_found",
+        assert names == ["admin", "api_auth", "auth", "canteen", "canteen_admin", "lost_found",
                          "main", "navigation", "notifications"]
         # No duplicated implementations: every URL path is owned by exactly one
         # endpoint (one page, one handler - across the entire unified platform).
@@ -102,7 +102,7 @@ class TestOneAuthSystem:
         resp = client.post("/auth/register", data={
             "full_name": "Integration Fresher", "email": "fresher@gechassan.ac.in",
             "password": "Freshpass123", "confirm_password": "Freshpass123",
-            "role": "student", "department": "CSE", "phone": "9998887776",
+            "role": "student", "department": "Computer Science & Engineering", "phone": "9998887776",
             "usn": "4GH24CS999", "semester": "1st Semester",
         })
         assert resp.status_code == 302

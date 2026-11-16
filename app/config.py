@@ -13,6 +13,7 @@ class Config:
     """Base application configuration for Smart Campus 360."""
     BASE_DIR = BASE_DIR
     SECRET_KEY = os.getenv("SECRET_KEY", "smart-campus-360-default-dev-secret-key-gec-hassan")
+    AUTH_JWT_SECRET = os.getenv("JWT_SECRET") or SECRET_KEY
     
     # Campus Information
     COLLEGE_NAME = os.getenv("COLLEGE_NAME", "Government Engineering College, Mosalehosahalli")

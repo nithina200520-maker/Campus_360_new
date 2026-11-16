@@ -1,6 +1,6 @@
 """
 Smart Campus 360 - Development Orchestrator
-Connects and runs both the Node.js Express backend and React Vite frontend.
+Runs Flask/SQLite authentication, the Express module API, and React/Vite.
 Compatible with: python run.dev / python run.py
 """
 
@@ -12,6 +12,7 @@ import subprocess
 import threading
 import webbrowser
 import signal
+from dotenv import load_dotenv
 
 # Ensure UTF-8 output and instant unbuffered flushing on Windows consoles
 if sys.platform == "win32":
@@ -88,21 +89,29 @@ def main():
     signal.signal(signal.SIGINT, cleanup_and_exit)
     signal.signal(signal.SIGTERM, cleanup_and_exit)
 
+    load_dotenv(os.path.join(PROJECT_ROOT, ".env"))
+    flask_port = os.getenv("FLASK_PORT", "5000")
+    module_api_port = os.getenv("MODULE_API_PORT", "5001")
+    frontend_port = os.getenv("VITE_PORT", "5173")
     local_ip = get_local_ip()
-    backend_url = "http://localhost:5000"
-    frontend_url = "http://localhost:5173"
-    network_url = f"http://{local_ip}:5173"
+    # Use the active interface address: another local service may own the
+    # loopback listener even though this Flask app binds to all interfaces.
+    flask_url = f"http://{local_ip}:{flask_port}"
+    backend_url = f"http://localhost:{module_api_port}"
+    frontend_url = f"http://localhost:{frontend_port}"
+    network_url = f"http://{local_ip}:{frontend_port}"
 
     print("\n" + "=" * 76)
     print("  CAMPUS 360° - SMART CAMPUS MANAGEMENT SYSTEM")
     print("  Government Engineering College, Mosalehosahalli, Hassan")
     print("=" * 76)
-    print(f"  [1] Backend API Service  : {backend_url}/")
-    print(f"  [2] Frontend Application : {frontend_url}/")
-    print(f"  [3] Network Access (LAN) : {network_url}/")
+    print(f"  [1] Shared SQL/Auth API   : {flask_url}/api/students/")
+    print(f"  [2] Module API Service    : {backend_url}/")
+    print(f"  [3] Frontend Application : {frontend_url}/")
+    print(f"  [4] Network Access (LAN) : {network_url}/")
     print("=" * 76)
-    print("  --> Connect your browser to: \033[1;36mhttp://localhost:5173/\033[0m")
-    print("  --> Press \033[1;31mCtrl+C\033[0m at any time to stop both servers.")
+    print(f"  --> Connect your browser to: \033[1;36m{frontend_url}/\033[0m")
+    print("  --> Press \033[1;31mCtrl+C\033[0m at any time to stop all services.")
     print("=" * 76 + "\n")
 
     # Command executables
@@ -110,11 +119,30 @@ def main():
     npm_cmd = "npm.cmd" if sys.platform == "win32" else "npm"
     ensure_npm_dependencies(npm_cmd)
 
-    # Start Backend: Node.js Express server
-    print("  [*] Starting Backend Service (Express on port 5000)...")
+    # Start Flask: shared account database and authentication API
+    print(f"  [*] Starting Shared Auth Service (Flask on port {flask_port})...")
+    flask_proc = subprocess.Popen(
+        [
+            sys.executable, "-m", "flask", "--app", "app:create_app",
+            "run", "--no-reload", "--host", "0.0.0.0", "--port", flask_port
+        ],
+        cwd=PROJECT_ROOT,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        bufsize=1
+    )
+    processes.append(flask_proc)
+
+    # Start module API: Node.js Express server
+    print(f"  [*] Starting Module API Service (Express on port {module_api_port})...")
+    backend_env = os.environ.copy()
+    backend_env["SERVER_PORT"] = module_api_port
+    backend_env["SHARED_AUTH_API_URL"] = flask_url
     backend_proc = subprocess.Popen(
         [node_cmd, os.path.join(SERVER_DIR, "index.js")],
         cwd=PROJECT_ROOT,
+        env=backend_env,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
@@ -123,10 +151,15 @@ def main():
     processes.append(backend_proc)
 
     # Start Frontend: Vite dev server with host 0.0.0.0
-    print("  [*] Starting Frontend Application (React + Vite on port 5173)...")
+    print(f"  [*] Starting Frontend Application (React + Vite on port {frontend_port})...")
+    frontend_env = os.environ.copy()
+    frontend_env["VITE_API_TARGET"] = backend_url
+    frontend_env["VITE_FLASK_API_TARGET"] = flask_url
+    frontend_env["VITE_PORT"] = frontend_port
     frontend_proc = subprocess.Popen(
-        [npm_cmd, "--prefix", "client", "run", "dev", "--", "--host", "0.0.0.0", "--port", "5173"],
+        [npm_cmd, "--prefix", "client", "run", "dev", "--", "--host", "0.0.0.0"],
         cwd=PROJECT_ROOT,
+        env=frontend_env,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
@@ -135,8 +168,10 @@ def main():
     processes.append(frontend_proc)
 
     # Start background threads to stream output
-    t_back = threading.Thread(target=stream_output, args=(backend_proc, "[BACKEND]", "32"), daemon=True)
+    t_flask = threading.Thread(target=stream_output, args=(flask_proc, "[AUTH]", "33"), daemon=True)
+    t_back = threading.Thread(target=stream_output, args=(backend_proc, "[API]", "32"), daemon=True)
     t_front = threading.Thread(target=stream_output, args=(frontend_proc, "[FRONTEND]", "36"), daemon=True)
+    t_flask.start()
     t_back.start()
     t_front.start()
 
@@ -155,8 +190,11 @@ def main():
     try:
         while True:
             # Check if any process terminated unexpectedly
+            if flask_proc.poll() is not None:
+                print("  [!] Shared auth process ended.")
+                break
             if backend_proc.poll() is not None:
-                print("  [!] Backend process ended.")
+                print("  [!] Module API process ended.")
                 break
             if frontend_proc.poll() is not None:
                 print("  [!] Frontend process ended.")

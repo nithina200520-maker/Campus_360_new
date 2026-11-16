@@ -63,14 +63,18 @@ python init_db.py
 * Safe to re-run: skips seeding when data already exists.
 * If you upgraded an older database instead, run the phase migrations
   `python migrate_phase2.py` … `python migrate_phase8.py` (each backs up the DB first).
+* For Student and Faculty ID uniqueness, run `python migrate_registration_ids.py`
+  once after upgrading the account schema.
 
 ### A2. Start the development server
 ```powershell
 python run.py
 ```
-Open **http://127.0.0.1:5000/** — the startup banner confirms all three modules loaded.
-To change port/host: `$env:PORT=5001; $env:HOST="0.0.0.0"; python run.py`
-(`0.0.0.0` lets phones on the same WiFi open the site at your laptop's LAN IP.)
+Open **http://127.0.0.1:5173/** — React is served by Vite, Flask provides the
+shared SQL authentication service on port 5000, and Express provides module APIs
+on port 5001. Set `FLASK_PORT`, `MODULE_API_PORT`, or `VITE_PORT` in `.env` to
+change the local service ports. The frontend is bound to `0.0.0.0` for LAN
+access; the startup banner prints the laptop's network URL.
 
 ### A3. Verify the installation
 ```powershell

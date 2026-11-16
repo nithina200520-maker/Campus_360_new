@@ -1,13 +1,42 @@
 import re
-from datetime import datetime
-from flask import render_template, request, redirect, url_for, flash, session, current_app, abort
-from app.blueprints.auth import auth_bp
+from datetime import datetime, timedelta, timezone
+from flask import render_template, request, redirect, url_for, flash, session, current_app, abort, jsonify
+from sqlalchemy import func, or_
+from sqlalchemy.exc import IntegrityError
+import jwt
+from app.blueprints.auth import auth_bp, api_auth_bp
 from app.models import User, AuditLog
 from app.database import db
 from app.utils.auth_helpers import login_user, logout_user, login_required, get_current_user
 
+DEPARTMENT_CHOICES = (
+    'Computer Science & Engineering',
+    'Information Science & Engineering',
+    'Electronics & Communication Engineering',
+    'Electrical & Electronics Engineering',
+    'Mechanical Engineering',
+    'Civil Engineering',
+    'Other',
+)
+SEMESTER_CHOICES = tuple(f'{number}{suffix} Semester' for number, suffix in (
+    ('1st', ''), ('2nd', ''), ('3rd', ''), ('4th', ''),
+    ('5th', ''), ('6th', ''), ('7th', ''), ('8th', ''),
+))
+DESIGNATION_CHOICES = (
+    'Assistant Professor',
+    'Associate Professor',
+    'Professor',
+    'Head of Department (HOD)',
+    'Lecturer',
+    'Senior Assistant Professor',
+    'Visiting Faculty',
+    'Other',
+)
+
 def validate_password_strength(password: str) -> tuple[bool, str]:
     """Enforces minimum 8 characters, with letters and numbers."""
+    if len(password.encode('utf-8')) > 72:
+        return False, "Password must be no more than 72 UTF-8 bytes."
     if len(password) < 8:
         return False, "Password must be at least 8 characters long."
     if not re.search(r"[A-Za-z]", password):
@@ -15,6 +44,177 @@ def validate_password_strength(password: str) -> tuple[bool, str]:
     if not re.search(r"\d", password):
         return False, "Password must contain at least one numeric digit."
     return True, ""
+
+
+def _api_error(message, status):
+    return jsonify(success=False, message=message), status
+
+
+def _api_user_data(user, role):
+    return {
+        'id': user.id,
+        'name': user.full_name,
+        'fullName': user.full_name,
+        'email': user.email,
+        'phone': user.phone,
+        'role': role,
+        'department': user.department,
+        'semester': user.semester,
+        'usn': user.usn_or_emp_id if role == 'student' else None,
+        'employeeId': user.usn_or_emp_id if role == 'faculty' else None,
+        'usnOrId': user.usn_or_emp_id,
+        'designation': user.designation,
+    }
+
+
+def _api_register(role):
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return _api_error('A JSON registration request is required.', 400)
+
+    full_name = str(data.get('fullName', '')).strip()
+    email = str(data.get('email', '')).strip().lower()
+    department = str(data.get('department', '')).strip()
+    phone = str(data.get('phoneNumber', data.get('phone', ''))).strip()
+    password = data.get('password', '')
+    confirm_password = data.get('confirmPassword', '')
+
+    identifier = str(
+        data.get('universityUSN', data.get('usn', '')) if role == 'student'
+        else data.get('employeeId', '')
+    ).strip().upper()
+    semester = str(data.get('currentSemester', data.get('semester', ''))).strip()
+    designation = str(data.get('academicDesignation', data.get('designation', ''))).strip()
+
+    if not isinstance(password, str) or not isinstance(confirm_password, str):
+        return _api_error('Password and confirmation must be strings.', 400)
+    if not full_name or not email or not department or not identifier or not password or not confirm_password:
+        return _api_error('Please complete all required registration fields.', 400)
+    if len(full_name) > 120 or len(email) > 120 or len(identifier) > 50 or len(phone) > 20:
+        return _api_error('One or more fields exceed the allowed length.', 400)
+    if not re.fullmatch(r'[^\s@]+@[^\s@]+\.[^\s@]+', email):
+        return _api_error('Please provide a valid email address.', 400)
+    if department not in DEPARTMENT_CHOICES:
+        return _api_error('Please select a valid department or branch.', 400)
+    if role == 'student' and semester not in SEMESTER_CHOICES:
+        return _api_error('Please select a valid current semester.', 400)
+    if role == 'faculty' and designation not in DESIGNATION_CHOICES:
+        return _api_error('Please select a valid academic designation.', 400)
+    if password != confirm_password:
+        return _api_error('Password and Confirm Password must match.', 400)
+    is_valid, message = validate_password_strength(password)
+    if not is_valid:
+        return _api_error(message, 400)
+
+    account_role = 'student' if role == 'student' else 'teacher'
+    if User.query.filter(func.lower(User.email) == email).first():
+        return _api_error('An account with this email address is already registered.', 409)
+    if User.query.filter(
+        User.role == account_role,
+        func.lower(User.usn_or_emp_id) == identifier.lower(),
+    ).first():
+        label = 'University USN' if role == 'student' else 'Employee ID'
+        return _api_error(f'This {label} is already registered.', 409)
+
+    user = User(
+        full_name=full_name,
+        email=email,
+        role=account_role,
+        department=department,
+        phone=phone or None,
+        usn_or_emp_id=identifier,
+        semester=semester if role == 'student' else None,
+        designation=designation if role == 'faculty' else None,
+        is_verified=role == 'student',
+        is_active=True,
+    )
+    user.set_password(password)
+    db.session.add(user)
+    try:
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        return _api_error('An account with this email or institutional ID is already registered.', 409)
+
+    AuditLog.log(
+        action='USER_REGISTERED' if role == 'student' else 'TEACHER_REGISTERED_PENDING_VERIFICATION',
+        module='AUTH',
+        user_id=user.id,
+        details=f'New {role.upper()} account registered: {full_name} ({email})',
+        ip_address=request.remote_addr,
+    )
+    return jsonify(
+        success=True,
+        message='Registration successful. Please sign in with your institutional ID or email.',
+        user=_api_user_data(user, role),
+    ), 201
+
+
+def _api_login(role):
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return _api_error('A JSON login request is required.', 400)
+    identifier = str(data.get('identifier', '')).strip()
+    password = data.get('password', '')
+    if not identifier or not isinstance(password, str) or not password:
+        return _api_error('Please provide your registered ID or email and password.', 400)
+
+    account_role = 'student' if role == 'student' else 'teacher'
+    name_clause = func.lower(User.full_name) == identifier.lower() if role == 'student' else False
+    user = User.query.filter(
+        User.role == account_role,
+        or_(
+            func.lower(User.email) == identifier.lower(),
+            func.lower(User.usn_or_emp_id) == identifier.lower(),
+            name_clause,
+        ),
+    ).first()
+    if not user or not user.check_password(password):
+        return _api_error('Invalid credentials for the selected account type.', 401)
+    if not user.is_active:
+        return _api_error('This account has been deactivated. Please contact the Main Admin.', 403)
+
+    now = datetime.now(timezone.utc)
+    token = jwt.encode(
+        {
+            'id': user.id,
+            'sub': str(user.id),
+            'name': user.full_name,
+            'usnOrId': user.usn_or_emp_id,
+            'role': role,
+            'department': user.department,
+            'iat': now,
+            'exp': now + timedelta(hours=24),
+        },
+        current_app.config['AUTH_JWT_SECRET'],
+        algorithm='HS256',
+    )
+    return jsonify(
+        success=True,
+        message=f'{role.title()} login successful.',
+        token=token,
+        user=_api_user_data(user, role),
+    )
+
+
+@api_auth_bp.route('/students/register', methods=['POST'])
+def api_student_register():
+    return _api_register('student')
+
+
+@api_auth_bp.route('/students/login', methods=['POST'])
+def api_student_login():
+    return _api_login('student')
+
+
+@api_auth_bp.route('/faculty/register', methods=['POST'])
+def api_faculty_register():
+    return _api_register('faculty')
+
+
+@api_auth_bp.route('/faculty/login', methods=['POST'])
+def api_faculty_login():
+    return _api_login('faculty')
 
 @auth_bp.route('/login', methods=['GET', 'POST'])
 def login():
@@ -66,8 +266,12 @@ def login():
             # Role-based landing redirects
             if user.role == 'main_admin':
                 return redirect(url_for('admin.dashboard'))
-            elif user.role == 'canteen_admin':
+            elif user.role == 'canteen_admin' or user.admin_scope == 'canteen':
                 return redirect(url_for('canteen_admin.dashboard'))
+            elif user.admin_scope == 'lost_found':
+                return redirect(url_for('admin.manage_lost_found'))
+            elif user.admin_scope == 'navigation':
+                return redirect(url_for('admin.manage_navigation'))
             else:
                 return redirect(url_for('main.index'))
         else:
@@ -106,22 +310,33 @@ def register():
         department = request.form.get('department', '').strip()
         phone = request.form.get('phone', '').strip()
 
-        # Strict security enforcement: Disallow public creation of admin accounts
-        if role in ['main_admin', 'canteen_admin']:
+        # Administrative access must be explicitly assigned by Main Admin.
+        admin_roles = {
+            'admin', 'main_admin', 'canteen_admin', 'lost_found_admin',
+            'navigation_admin', 'lost_found', 'navigation', 'canteen'
+        }
+        if role in admin_roles:
             AuditLog.log(
                 action='UNAUTHORIZED_ADMIN_REGISTRATION_ATTEMPT',
                 module='AUTH',
                 details=f"Blocked attempt to register public account with administrative role '{role}' for '{email}'.",
                 ip_address=request.remote_addr
             )
-            flash("Security Violation: Administrative roles cannot be registered through public registration.", "danger")
+            flash("Administrative access cannot be registered publicly. Contact the Main Admin for role assignment.", "danger")
             return redirect(url_for('auth.login', tab='register'))
 
         if role not in ['student', 'teacher', 'visitor']:
-            role = 'student'
+            flash("Please select Student, Faculty, or Visitor to register.", "warning")
+            return render_template('auth/login.html', active_tab='register', form_data=request.form)
 
         if not full_name or not email or not password:
             flash("Please fill in all required fields.", "warning")
+            return render_template('auth/login.html', active_tab='register', form_data=request.form)
+        if len(full_name) > 120 or len(email) > 120:
+            flash("Name and email must be no more than 120 characters.", "warning")
+            return render_template('auth/login.html', active_tab='register', form_data=request.form)
+        if not re.fullmatch(r'[^\s@]+@[^\s@]+\.[^\s@]+', email):
+            flash("Please provide a valid email address.", "warning")
             return render_template('auth/login.html', active_tab='register', form_data=request.form)
 
         if password != confirm_password:
@@ -152,9 +367,36 @@ def register():
             is_verified = False
         elif role == 'student':
             usn_or_emp_id = request.form.get('usn', '').strip().upper()
-            semester = request.form.get('semester', '1st Semester').strip()
+            semester = request.form.get('semester', '').strip()
         elif role == 'visitor':
             purpose_of_visit = request.form.get('purpose_of_visit', 'Campus Visit').strip()
+
+        if role in ('student', 'teacher'):
+            if department not in DEPARTMENT_CHOICES:
+                flash("Please select a valid department or branch.", "warning")
+                return render_template('auth/login.html', active_tab='register', form_data=request.form)
+            if len(phone) > 20:
+                flash("Phone number must be no more than 20 characters.", "warning")
+                return render_template('auth/login.html', active_tab='register', form_data=request.form)
+            if not usn_or_emp_id:
+                flash("University USN is required." if role == 'student' else "Official Employee ID is required.", "warning")
+                return render_template('auth/login.html', active_tab='register', form_data=request.form)
+            if len(usn_or_emp_id) > 50:
+                flash("Institutional ID must be no more than 50 characters.", "warning")
+                return render_template('auth/login.html', active_tab='register', form_data=request.form)
+            duplicate_identifier = User.query.filter(
+                User.role == role,
+                func.lower(User.usn_or_emp_id) == usn_or_emp_id.lower(),
+            ).first()
+            if duplicate_identifier:
+                flash("This University USN is already registered." if role == 'student' else "This Employee ID is already registered.", "danger")
+                return render_template('auth/login.html', active_tab='register', form_data=request.form)
+            if role == 'student' and semester not in SEMESTER_CHOICES:
+                flash("Please select a valid current semester.", "warning")
+                return render_template('auth/login.html', active_tab='register', form_data=request.form)
+            if role == 'teacher' and designation not in DESIGNATION_CHOICES:
+                flash("Please select a valid academic designation.", "warning")
+                return render_template('auth/login.html', active_tab='register', form_data=request.form)
 
         new_user = User(
             full_name=full_name,
@@ -171,7 +413,12 @@ def register():
         )
         new_user.set_password(password)
         db.session.add(new_user)
-        db.session.commit()
+        try:
+            db.session.commit()
+        except IntegrityError:
+            db.session.rollback()
+            flash("An account with this email or institutional ID is already registered.", "danger")
+            return render_template('auth/login.html', active_tab='register', form_data=request.form)
 
         if role == 'teacher':
             AuditLog.log(

@@ -10,7 +10,7 @@
 
 ```powershell
 python -m pytest -q            # must show: 263 passed
-python run.py                  # http://127.0.0.1:5000/
+python run.py                  # React app: http://127.0.0.1:5173/
 ```
 
 - [ ] Fresh seeded database (run `python init_db.py` on a clean machine) — demo accounts below.
@@ -171,7 +171,7 @@ panels consistently rate honest limitation slides higher than overselling.
 | AI shows no match | Check the pre-created *Found* report is still `open`; refresh; verify both photos are real images |
 | Slot not bookable | It needs ≥ 15 min lead time — create a later slot as Canteen Admin first |
 | Payment page stalls | Sandbox is instant by default; someone set `PAYMENT_SANDBOX_PAYMENT_OUTCOME` — reset to `succeeded` |
-| Port 5000 busy | `$env:PORT=5001; python run.py` and use `http://127.0.0.1:5001/` |
+| A local service port is busy | Change `FLASK_PORT`, `MODULE_API_PORT`, or `VITE_PORT` in `.env`, then restart `python run.py` |
 | Nerves / forgotten step | The navbar tells you where you are; every screen is 2 clicks from the dashboard |
 
 [← Demonstration pack](PROJECT_REPORT.md)

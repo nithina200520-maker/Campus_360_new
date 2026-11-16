@@ -67,7 +67,8 @@
               <th>Role</th>
               <th>Faculty Verification</th>
               <th>Status</th>
-              <th>Modify Role</th>
+              <th>Base Role</th>
+              <th>Module Admin Access</th>
               <th class="pe-4 text-end">Administrative Actions</th>
             </tr>
           </thead>
@@ -95,8 +96,11 @@
               </td>
               <td>
                 <span class="badge {% if u.role == 'teacher' %}badge-teacher-priority{% elif u.role == 'main_admin' %}bg-danger{% elif u.role == 'canteen_admin' %}bg-success{% else %}bg-primary{% endif %} text-uppercase">
-                  {{ u.role.replace('_', ' ') }}
+                  {{ 'Faculty' if u.role == 'teacher' else u.role.replace('_', ' ') }}
                 </span>
+                {% if u.admin_role_label %}
+                  <div class="small text-muted mt-1">{{ u.admin_role_label }}</div>
+                {% endif %}
               </td>
               <td>
                 {% if u.role == 'teacher' %}
@@ -124,13 +128,30 @@
                 <form method="POST" action="{{ url_for('admin.change_user_role', user_id=u.id) }}" class="d-flex gap-1 align-items-center">
                   <select name="new_role" class="form-select form-select-sm" style="width: auto;">
                     <option value="student" {% if u.role == 'student' %}selected{% endif %}>Student</option>
-                    <option value="teacher" {% if u.role == 'teacher' %}selected{% endif %}>Teacher</option>
+                    <option value="teacher" {% if u.role == 'teacher' %}selected{% endif %}>Faculty</option>
                     <option value="canteen_admin" {% if u.role == 'canteen_admin' %}selected{% endif %}>Canteen Admin</option>
                     <option value="main_admin" {% if u.role == 'main_admin' %}selected{% endif %}>Main Admin</option>
                     <option value="visitor" {% if u.role == 'visitor' %}selected{% endif %}>Visitor</option>
                   </select>
                   <button type="submit" class="btn btn-sm btn-outline-secondary">Save</button>
                 </form>
+              </td>
+              <td>
+                {% if u.role in ('student', 'teacher') %}
+                <form method="POST" action="{{ url_for('admin.change_user_admin_scope', user_id=u.id) }}" class="d-flex gap-1 align-items-center">
+                  <select name="admin_scope" class="form-select form-select-sm" aria-label="Module admin access for {{ u.full_name }}">
+                    <option value="" {% if not u.admin_scope %}selected{% endif %}>No module admin access</option>
+                    {% if u.role == 'teacher' %}
+                    <option value="lost_found" {% if u.admin_scope == 'lost_found' %}selected{% endif %}>Lost &amp; Found Admin</option>
+                    {% endif %}
+                    <option value="navigation" {% if u.admin_scope == 'navigation' %}selected{% endif %}>College Navigation Admin</option>
+                    <option value="canteen" {% if u.admin_scope == 'canteen' %}selected{% endif %}>Canteen Admin</option>
+                  </select>
+                  <button type="submit" class="btn btn-sm btn-outline-primary">Save</button>
+                </form>
+                {% else %}
+                  <span class="text-muted small">Not eligible</span>
+                {% endif %}
               </td>
               <td class="pe-4 text-end">
                 <div class="d-flex gap-1 justify-content-end">
@@ -170,7 +191,7 @@
             </tr>
             {% else %}
             <tr>
-              <td colspan="7" class="text-center py-5 text-muted">
+              <td colspan="8" class="text-center py-5 text-muted">
                 <i class="fa-solid fa-users fa-3x text-muted mb-3 d-block"></i>
                 No users found matching the selected filter criteria.
               </td>

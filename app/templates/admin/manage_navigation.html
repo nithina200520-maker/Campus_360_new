@@ -8,14 +8,21 @@
   <div class="d-flex flex-wrap justify-content-between align-items-center mb-4">
     <div>
       <span class="badge bg-primary px-3 py-1 rounded-pill mb-1">
-        <i class="fa-solid fa-map-location-dot me-1"></i> Main Admin &bull; Phase 8 Campus Management
+        <i class="fa-solid fa-map-location-dot me-1"></i>
+        {% if user.admin_scope == 'navigation' %}College Navigation Admin Dashboard{% else %}Main Admin &bull; Phase 8 Campus Management{% endif %}
       </span>
       <h2 class="fw-bold text-dark mb-0">Campus Map, Buildings, Rooms &amp; Path Manager</h2>
       <p class="text-muted small mb-0">Government Engineering College, Mosalehosahalli (Hassan) &mdash; {{ nodes|length }} locations across {{ buildings|length }} building(s) and {{ floors|length }} floor(s); {{ photos_count }} campus photograph(s) on file; {{ edges|length }} route connections.</p>
     </div>
-    <a href="{{ url_for('admin.dashboard') }}" class="btn btn-sm btn-outline-secondary rounded-pill mt-2">
-      <i class="fa-solid fa-arrow-left me-1"></i> Master Dashboard
-    </a>
+    {% if user.role == 'main_admin' %}
+      <a href="{{ url_for('admin.dashboard') }}" class="btn btn-sm btn-outline-secondary rounded-pill mt-2">
+        <i class="fa-solid fa-arrow-left me-1"></i> Master Dashboard
+      </a>
+    {% else %}
+      <a href="{{ url_for('main.index') }}" class="btn btn-sm btn-outline-secondary rounded-pill mt-2">
+        <i class="fa-solid fa-house me-1"></i> Campus Home
+      </a>
+    {% endif %}
   </div>
 
   {% with messages = get_flashed_messages(with_categories=true) %}

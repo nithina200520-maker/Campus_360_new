@@ -1,19 +1,25 @@
 import json
 import secrets
-from datetime import date, datetime, time, timedelta
-from werkzeug.security import generate_password_hash, check_password_hash
+from datetime import datetime, time, timedelta
+import bcrypt
+from werkzeug.security import check_password_hash
 from app.database import db
 
 class User(db.Model):
-    """User account model supporting all 5 application roles."""
+    """User account model supporting campus roles and an optional admin scope."""
     __tablename__ = 'users'
+    __table_args__ = (
+        db.UniqueConstraint('role', 'usn_or_emp_id', name='uq_users_role_identifier'),
+    )
 
     id = db.Column(db.Integer, primary_key=True)
     full_name = db.Column(db.String(120), nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False, index=True)
     password_hash = db.Column(db.String(255), nullable=False)
-    # Roles: main_admin, canteen_admin, teacher, student, visitor
+    # Base roles: main_admin, canteen_admin, teacher, student, visitor.
     role = db.Column(db.String(30), nullable=False, default='student', index=True)
+    # Scoped administration is separate so faculty retain their existing account role.
+    admin_scope = db.Column(db.String(30), nullable=True, index=True)
     department = db.Column(db.String(100), nullable=True) # e.g. CSE, ECE, ME, Civil, Admin
     phone = db.Column(db.String(20), nullable=True)
     usn_or_emp_id = db.Column(db.String(50), nullable=True)
@@ -42,9 +48,17 @@ class User(db.Model):
     canteen_orders = db.relationship('CanteenOrder', backref='customer', lazy=True)
 
     def set_password(self, password: str):
-        self.password_hash = generate_password_hash(password)
+        self.password_hash = bcrypt.hashpw(
+            password.encode('utf-8'),
+            bcrypt.gensalt()
+        ).decode('ascii')
 
     def check_password(self, password: str) -> bool:
+        if self.password_hash.startswith(('$2a$', '$2b$', '$2y$')):
+            try:
+                return bcrypt.checkpw(password.encode('utf-8'), self.password_hash.encode('ascii'))
+            except (ValueError, UnicodeEncodeError):
+                return False
         return check_password_hash(self.password_hash, password)
 
     # ---- Settings helpers -------------------------------------------------
@@ -93,7 +107,22 @@ class User(db.Model):
         return self.role == 'main_admin'
 
     def is_canteen_admin(self) -> bool:
-        return self.role in ('main_admin', 'canteen_admin')
+        return self.role in ('main_admin', 'canteen_admin') or self.admin_scope == 'canteen'
+
+    def is_lost_found_admin(self) -> bool:
+        return self.role == 'main_admin' or self.admin_scope == 'lost_found'
+
+    def is_navigation_admin(self) -> bool:
+        return self.role == 'main_admin' or self.admin_scope == 'navigation'
+
+    @property
+    def admin_role_label(self) -> str | None:
+        labels = {
+            'lost_found': 'Lost & Found Admin',
+            'navigation': 'College Navigation Admin',
+            'canteen': 'Canteen Admin',
+        }
+        return labels.get(self.admin_scope)
 
     def is_teacher(self) -> bool:
         return self.role == 'teacher'
@@ -127,6 +156,7 @@ class User(db.Model):
             "full_name": self.full_name,
             "email": self.email,
             "role": self.role,
+            "admin_scope": self.admin_scope,
             "department": self.department,
             "phone": self.phone,
             "usn_or_emp_id": self.usn_or_emp_id,

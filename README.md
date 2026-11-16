@@ -33,11 +33,14 @@
 | :--- | :--- | :--- | :--- |
 | **Main Admin** | `admin@gechassan.ac.in` | `Admin@123` | Universal control across all 3 modules, user management, audit logs, node & photo management. |
 | **Canteen Admin** | `canteen@gechassan.ac.in` | `Canteen@123` | Restricted to canteen operations: live kitchen queue, Teacher-First priority queue, QR verification, menu & stock editor. |
+| **Lost & Found Admin** | Assigned by Main Admin | Existing account password | Faculty account with Lost & Found report, claim, status and notification management only. |
+| **College Navigation Admin** | Assigned by Main Admin | Existing account password | Assigned account with campus location, route, floor-plan and map management only. |
+| **Scoped Canteen Admin** | Assigned by Main Admin | Existing account password | Assigned account with canteen administration only. |
 | **Teacher** | `teacher@gechassan.ac.in` | `Teacher@123` | Faculty access, campus navigation, lost & found, **automatic Teacher-First Priority queue** on canteen orders. |
 | **Student** | `student@gechassan.ac.in` | `Student@123` | Navigation, reporting lost/found items, browsing & advance booking from canteen. |
 | **Visitor** | `visitor@gechassan.ac.in` | `Visitor@123` | Public navigation, reporting found items, guest canteen pickup. |
 
-*Note: For convenient local testing, a 1-click **"Switch Role"** pill is provided in the top navigation header and login page.*
+*Note: Admin access is never available through public registration. Main Admin assigns a single module scope to an existing student or faculty account from User Management; Lost & Found Admin is faculty-only. Each scope is enforced on server routes as well as in the navigation. The base account role is retained.*
 
 ---
 
@@ -187,16 +190,19 @@ The application is pre-configured with a dual database connector:
    - You can also explicitly set `USE_SQLITE=True` in `.env`.
 
 ### Step 4: Run the Application
-Start the full application (React frontend and Express API):
+Start the full application (Flask shared authentication/database, Express module API, and React frontend):
 ```powershell
 python run.py
 ```
 
 On a fresh clone, `run.py` installs the locked Node.js dependencies for the
-frontend and API if they are missing. This requires Node.js and npm to be
-installed. Open **`http://localhost:5173/`** in your browser; the frontend
-connects to the API on port 5000. Keep the terminal open while using the app,
-and press **Ctrl+C** to stop both services.
+frontend and API if they are missing. This requires Python, Node.js, and npm.
+The Flask service uses port 5000 for the shared SQL account store, Express uses
+port 5001 for module APIs, and Vite uses port 5173. Student and faculty
+registration/login requests are served by Flask; the Vite proxy routes other
+module APIs to Express. Open **`http://localhost:5173/`** in your browser.
+Keep the terminal open while using the app, and press **Ctrl+C** to stop all
+three services.
 
 ---
 
@@ -226,13 +232,16 @@ and press **Ctrl+C** to stop both services.
 
 ## 🔐 Completed Phase 2 Milestones - Authentication & Role Management
 
-1. Secure login/logout with hashed passwords, hardened sessions (2-hour lifetime, HttpOnly, SameSite) and instant session termination on account deactivation.
-2. Student / Teacher / Visitor registration flows; public registration can **never** create a Main Admin.
+1. Secure login/logout with bcrypt password hashes (legacy Werkzeug hashes remain verifiable), hardened sessions (2-hour lifetime, HttpOnly, SameSite) and instant session termination on account deactivation.
+2. Student / Faculty / Visitor registration flows; public registration can **never** create an administrative account.
 3. Teacher verification workflow - canteen priority applies **only to verified teachers**.
 4. Password reset with single-use, time-limited, constant-time-verified tokens.
 5. Account activation/deactivation, role changes and every privileged action recorded in the audit trail.
 6. Production lockdown of the demo role-switcher (403 + audit log outside development) and visitor masking of private contact data.
 7. pytest suite (73 tests) running against an isolated throwaway database.
+8. Module-scoped Lost & Found, College Navigation and Canteen Admin roles, assigned only by Main Admin and restricted by server-side role checks.
+9. Existing database upgrade for `users.admin_scope`: `python migrate_admin_roles.py` (idempotent; backs up SQLite databases and preserves existing records).
+10. Student and faculty JSON registration/login endpoints use the same SQL `users` table as the Flask site. Run `python migrate_registration_ids.py` once to add the unique `(role, usn_or_emp_id)` index; the migration backs up SQLite and stops without changing account rows if it finds duplicate IDs.
 
 ## 🧭 Completed Phase 3 Milestones - Smart Campus Navigation
 
@@ -253,7 +262,7 @@ and press **Ctrl+C** to stop both services.
 
 ```powershell
 python migrate_phase3.py          # one-time schema + sample data upgrade (backs up DB first)
-python run.py                     # dev server on http://127.0.0.1:5000
+python run.py                     # React app on http://127.0.0.1:5173
 python -m pytest -q               # full 73-test suite on an isolated temp database
 docker compose up -d --build web  # production image on http://127.0.0.1:8080
 ```
@@ -283,7 +292,7 @@ docker compose up -d --build web  # production image on http://127.0.0.1:8080
 ```powershell
 python download_embedding_model.py  # optional: one-time pretrained model (auto-falls back if skipped)
 python migrate_phase4.py            # one-time schema + sample upgrade (backs up DB first)
-python run.py                       # dev server on http://127.0.0.1:5000
+python run.py                       # React app on http://127.0.0.1:5173
 python -m pytest -q                 # full 102-test suite on an isolated temp database
 docker compose up -d --build web    # production image on http://127.0.0.1:8080
 ```

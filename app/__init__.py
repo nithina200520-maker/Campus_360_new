@@ -135,7 +135,7 @@ def create_app(config_name="default"):
         }
 
     # Register Blueprints
-    from app.blueprints.auth import auth_bp
+    from app.blueprints.auth import auth_bp, api_auth_bp
     from app.blueprints.main import main_bp
     from app.blueprints.admin import admin_bp
     from app.blueprints.canteen_admin import canteen_admin_bp
@@ -145,6 +145,7 @@ def create_app(config_name="default"):
     from app.blueprints.notifications import notifications_bp
 
     app.register_blueprint(auth_bp)
+    app.register_blueprint(api_auth_bp)
     app.register_blueprint(main_bp)
     app.register_blueprint(admin_bp)
     app.register_blueprint(canteen_admin_bp)

@@ -54,10 +54,11 @@ def test_passwords_are_hashed_never_plaintext(client, db):
         "full_name": "Hash Check", "email": "hash@gechassan.ac.in",
         "password": "Str0ngPass99", "confirm_password": "Str0ngPass99",
         "role": "student", "usn": "4GH22CS999",
+        "department": "Computer Science & Engineering", "semester": "5th Semester",
     })
     user = User.query.filter_by(email="hash@gechassan.ac.in").first()
     assert user and user.password_hash != "Str0ngPass99"
-    assert user.password_hash.startswith(("pbkdf2:", "scrypt:"))
+    assert user.password_hash.startswith(("$2a$", "$2b$", "$2y$"))
 
 
 def test_student_registration_creates_active_verified_account(client, db):
@@ -65,6 +66,7 @@ def test_student_registration_creates_active_verified_account(client, db):
         "full_name": "New Student", "email": "new.student@gechassan.ac.in",
         "password": TEST_PASSWORD, "confirm_password": TEST_PASSWORD,
         "role": "student", "usn": "4GH22CS100", "semester": "3rd Semester",
+        "department": "Computer Science & Engineering",
     }, follow_redirects=True)
     user = User.query.filter_by(email="new.student@gechassan.ac.in").first()
     assert user is not None and user.role == "student" and user.is_active
@@ -76,6 +78,7 @@ def test_teacher_registration_starts_unverified_pending(client, db):
         "full_name": "Pending Faculty", "email": "fresh.teacher@gechassan.ac.in",
         "password": TEST_PASSWORD, "confirm_password": TEST_PASSWORD,
         "role": "teacher", "employee_id": "EMP-CSE-777", "designation": "Assistant Professor",
+        "department": "Computer Science & Engineering",
     })
     user = User.query.filter_by(email="fresh.teacher@gechassan.ac.in").first()
     assert user is not None and user.is_verified is False

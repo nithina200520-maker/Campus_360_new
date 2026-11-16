@@ -18,7 +18,7 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState(() => {
     try {
       const stored = localStorage.getItem('campus360_user');
-      return stored ? JSON.parse(stored) : null;
+      return stored && localStorage.getItem('campus360_token') ? JSON.parse(stored) : null;
     } catch {
       return null;
     }
@@ -103,8 +103,18 @@ export default function App() {
   useEffect(() => {
     if (isDashboardPage && !currentUser) {
       navigateTo('auth');
+    } else if (currentUser?.role === 'faculty' && currentPage === 'dashboard') {
+      navigateTo('faculty-dashboard');
+    } else if (
+      currentPage === 'faculty-dashboard'
+      && currentUser?.role !== 'faculty'
+      && currentUser?.role !== 'admin'
+    ) {
+      navigateTo('dashboard');
+    } else if (currentPage === 'admin-dashboard' && currentUser?.role !== 'admin') {
+      navigateTo(currentUser?.role === 'faculty' ? 'faculty-dashboard' : 'dashboard');
     }
-  }, [currentPage, currentUser]);
+  }, [currentPage, currentUser, isDashboardPage]);
 
   return (
     <div className="min-h-screen bg-[#060b18] text-slate-100 flex flex-col font-sans selection:bg-cyan-500 selection:text-white relative">

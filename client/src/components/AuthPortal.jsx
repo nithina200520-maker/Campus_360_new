@@ -41,8 +41,8 @@ export default function AuthPortal({ initialTab, initialMode = 'register', onAut
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [department, setDepartment] = useState('Computer Science & Engineering');
-  const [semester, setSemester] = useState('5th Sem');
-  const [adminKey, setAdminKey] = useState('');
+  const [semester, setSemester] = useState('1st Semester');
+  const [academicDesignation, setAcademicDesignation] = useState('Assistant Professor');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
 
@@ -83,14 +83,44 @@ export default function AuthPortal({ initialTab, initialMode = 'register', onAut
     setEmail('');
     setPhone('');
     setConfirmPassword('');
-    setAdminKey('');
+    setSemester('1st Semester');
+    setAcademicDesignation('Assistant Professor');
   };
 
   // Switch Tab while keeping selected role
   const handleTabSwitch = (tab) => {
+    if (tab === 'register' && selectedRole === 'admin') {
+      setSelectedRole('student');
+    }
     setActiveTab(tab);
     setErrorMessage('');
     setSuccessMessage('');
+  };
+
+  const parseJsonResponse = async (response) => {
+    const text = await response.text();
+    if (!text) {
+      return {};
+    }
+
+    try {
+      return JSON.parse(text);
+    } catch {
+      if (/<\s*(?:!doctype|html|head|body|title|meta|script|div|span)/i.test(text)) {
+        return {
+          success: false,
+          message: 'The registration service is unavailable or rejected the request. Please try again.'
+        };
+      }
+
+      return {
+        success: false,
+        message: text
+          .replace(/\s+/g, ' ')
+          .trim()
+          .slice(0, 200) || 'The server returned an unexpected response.'
+      };
+    }
   };
 
   // Handle Registration
@@ -99,31 +129,33 @@ export default function AuthPortal({ initialTab, initialMode = 'register', onAut
     setErrorMessage('');
     setSuccessMessage('');
 
-    if (password !== confirmPassword) {
+    if (selectedRole !== 'student' && selectedRole !== 'faculty') {
+      setErrorMessage('Only student and faculty accounts can be registered here.');
+      return;
+    }
+
+    if (password.length < 8 || !/[A-Za-z]/.test(password) || !/\d/.test(password)) {
+      setErrorMessage('Password must contain at least 8 characters, one letter, and one number.');
+      return;
+    }
+
+    if (!confirmPassword || password !== confirmPassword) {
       setErrorMessage('Password and Confirm Password must match.');
       return;
     }
 
-    if (password.length < 6) {
-      setErrorMessage('Password must be at least 6 characters long.');
+    if (!fullName.trim() || !identifier.trim() || !email.trim() || !department) {
+      setErrorMessage('Please complete all required registration fields.');
       return;
     }
 
-    if (selectedRole === 'student') {
-      const cleanUsn = identifier.trim().toUpperCase();
-      if (!cleanUsn.startsWith('4HG')) {
-        setErrorMessage('Student USN must start with authorized college code 4HG (e.g. 4HG22CS010).');
-        return;
-      }
-      const vtuRegex = /^4HG\d{2}[A-Z]{2}\d{3}$/;
-      if (!vtuRegex.test(cleanUsn)) {
-        setErrorMessage('Invalid Student USN format. Must follow standard VTU pattern (e.g. 4HG22CS010).');
-        return;
-      }
+    if (selectedRole === 'student' && !semester) {
+      setErrorMessage('Please select your current semester.');
+      return;
     }
 
-    if (selectedRole === 'faculty' && !identifier.trim().toUpperCase().startsWith('GEC-FAC-') && !identifier.trim().toUpperCase().startsWith('FAC')) {
-      setErrorMessage('Faculty ID must start with GEC-FAC- (e.g. GEC-FAC-102).');
+    if (selectedRole === 'faculty' && !academicDesignation) {
+      setErrorMessage('Please select your academic designation.');
       return;
     }
 
@@ -131,15 +163,14 @@ export default function AuthPortal({ initialTab, initialMode = 'register', onAut
 
     try {
       const payload = {
-        role: selectedRole,
         fullName: fullName.trim(),
-        usn: selectedRole === 'student' ? identifier.trim().toUpperCase() : undefined,
-        facultyId: selectedRole === 'faculty' ? identifier.trim().toUpperCase() : undefined,
         email: email.trim().toLowerCase(),
-        phone: phone.trim() || '9845012345',
+        phoneNumber: phone.trim(),
         department,
-        semester: selectedRole === 'student' ? semester : undefined,
-        adminKey: selectedRole === 'admin' ? adminKey.trim() : undefined,
+        universityUSN: selectedRole === 'student' ? identifier.trim().toUpperCase() : undefined,
+        currentSemester: selectedRole === 'student' ? semester : undefined,
+        employeeId: selectedRole === 'faculty' ? identifier.trim().toUpperCase() : undefined,
+        academicDesignation: selectedRole === 'faculty' ? academicDesignation : undefined,
         password,
         confirmPassword
       };
@@ -147,33 +178,26 @@ export default function AuthPortal({ initialTab, initialMode = 'register', onAut
       const res = await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        body: JSON.stringify({
+          ...payload,
+          role: selectedRole
+        })
       });
 
-      const data = await res.json();
+      const data = await parseJsonResponse(res);
 
-      if (data.success) {
-        setSuccessMessage('Registration Successful! Academic details verified against college records.');
-        
-        // Save registered identifier for login
-        const registeredId = (selectedRole === 'student' || selectedRole === 'faculty') ? identifier.toUpperCase() : email.toLowerCase();
-        
-        // Smoothly redirect to Login tab with current role selected
-        setTimeout(() => {
-          setActiveTab('login');
-          setIdentifier(registeredId);
-          setPassword(password);
-          setSuccessMessage(`Registration complete! Please log in using your ${selectedRole === 'student' ? 'USN' : selectedRole === 'faculty' ? 'Faculty ID' : 'Admin Email'} and password.`);
-        }, 1500);
-      } else {
+      if (!res.ok || !data.success) {
         setErrorMessage(data.message || 'Registration failed. Please check your details.');
+        return;
       }
-    } catch (err) {
-      // Local fallback in case server is starting
-      setSuccessMessage('Registration Verified! Account saved. Redirecting to Login...');
-      setTimeout(() => {
-        setActiveTab('login');
-      }, 1500);
+
+      setActiveTab('login');
+      setIdentifier(identifier.trim().toUpperCase());
+      setPassword('');
+      setConfirmPassword('');
+      setSuccessMessage(data.message || 'Registration complete. Please log in.');
+    } catch {
+      setErrorMessage('Could not reach the registration service. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -186,24 +210,11 @@ export default function AuthPortal({ initialTab, initialMode = 'register', onAut
     setSuccessMessage('');
 
     if (!identifier || !password) {
-      setErrorMessage(selectedRole === 'student' ? 'Please enter your registered Student Name or USN and password.' : 'Please provide both your ID and password.');
+      const missingMessage = selectedRole === 'student'
+        ? 'Please provide your registered student name and password.'
+        : 'Please provide your registered ID or email and password.';
+      setErrorMessage(missingMessage);
       return;
-    }
-
-    if (selectedRole === 'student') {
-      const cleanInput = identifier.trim();
-      const isUsnCandidate = /^[0-9]/.test(cleanInput) || cleanInput.toUpperCase().startsWith('4');
-      if (isUsnCandidate) {
-        if (!cleanInput.toUpperCase().startsWith('4HG')) {
-          setErrorMessage('Student USN must start with authorized college code 4HG (e.g. 4HG22CS010).');
-          return;
-        }
-        const vtuRegex = /^4HG\d{2}[A-Za-z]{2}\d{3}$/i;
-        if (!vtuRegex.test(cleanInput)) {
-          setErrorMessage('Invalid Student USN format. Must follow standard VTU pattern (e.g. 4HG22CS010).');
-          return;
-        }
-      }
     }
 
     if (rememberMe) {
@@ -227,31 +238,19 @@ export default function AuthPortal({ initialTab, initialMode = 'register', onAut
         })
       });
 
-      const data = await res.json();
+      const data = await parseJsonResponse(res);
 
-      if (data.success) {
-        if (data.token) {
-          localStorage.setItem('campus360_token', data.token);
-          localStorage.setItem('campus360_user', JSON.stringify(data.user));
-        }
-        onAuthSuccess(data.user);
-      } else {
+      if (!res.ok || !data.success) {
         setErrorMessage(data.message || 'Invalid credentials. Access denied.');
+        return;
       }
-    } catch (err) {
-      // Safe offline fallback for evaluation
-      const fallbackUser = {
-        id: selectedRole === 'admin' ? 3 : selectedRole === 'faculty' ? 2 : 1,
-        name: selectedRole === 'admin' ? "College Administrator" : selectedRole === 'faculty' ? "Dr. Baby H.T." : "Nithin A",
-        usn: identifier.toUpperCase(),
-        usnOrId: identifier.toUpperCase(),
-        email: selectedRole === 'admin' ? identifier : `${identifier.toLowerCase()}@gechassan.ac.in`,
-        role: selectedRole,
-        department: department || "Computer Science & Engineering",
-        semester: selectedRole === 'student' ? "5th Sem" : null
-      };
-      localStorage.setItem('campus360_user', JSON.stringify(fallbackUser));
-      onAuthSuccess(fallbackUser);
+      if (data.token) {
+        localStorage.setItem('campus360_token', data.token);
+        localStorage.setItem('campus360_user', JSON.stringify(data.user));
+      }
+      onAuthSuccess(data.user);
+    } catch {
+      setErrorMessage('Could not reach the sign-in service. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -270,13 +269,23 @@ export default function AuthPortal({ initialTab, initialMode = 'register', onAut
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ identifier: forgotIdentifier, role: selectedRole })
       });
-      const data = await res.json();
+      const data = await parseJsonResponse(res);
       setForgotMessage(data.message || 'Password reset instructions dispatched to registered institutional email.');
     } catch {
-      setForgotMessage(`Password reset token sent to registered email for ${forgotIdentifier}. Development test OTP: 360360`);
+      setForgotMessage('Could not reach the password reset service. Please try again.');
     } finally {
       setForgotLoading(false);
     }
+  };
+
+  const passwordLengthValid = password.length >= 8;
+  const passwordLettersAndNumbersValid = /[A-Za-z]/.test(password) && /\d/.test(password);
+  const passwordConfirmationEntered = confirmPassword.length > 0;
+  const passwordsMatch = passwordConfirmationEntered && password === confirmPassword;
+  const renderPasswordIndicator = (valid, active) => {
+    if (valid) return <CheckCircle className="w-4 h-4 text-emerald-400 transition-colors" />;
+    if (active) return <X className="w-4 h-4 text-red-400 transition-colors" />;
+    return <span className="w-3.5 h-3.5 rounded-full border border-slate-500 transition-colors" aria-hidden="true" />;
   };
 
   return (
@@ -366,7 +375,7 @@ export default function AuthPortal({ initialTab, initialMode = 'register', onAut
             <span className="text-cyan-400 text-[10px] font-normal">Active: {selectedRole.toUpperCase()}</span>
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
+          <div className={`grid gap-3 ${activeTab === 'login' ? 'grid-cols-3' : 'grid-cols-2'}`}>
             {/* Card 1: Student */}
             <div
               onClick={() => handleRoleSelect('student')}
@@ -415,29 +424,30 @@ export default function AuthPortal({ initialTab, initialMode = 'register', onAut
               </span>
             </div>
 
-            {/* Card 3: Admin */}
-            <div
-              onClick={() => handleRoleSelect('admin')}
-              className={`relative cursor-pointer p-3 sm:p-4 rounded-2xl border text-center transition-all duration-300 flex flex-col items-center justify-center gap-1.5 ${
-                selectedRole === 'admin'
-                  ? 'bg-gradient-to-tr from-cyan-950/80 to-blue-900/40 border-cyan-400 shadow-[0_0_25px_rgba(0,242,254,0.4)] scale-[1.02]'
-                  : 'bg-[#060e20] border-cyan-500/20 hover:border-cyan-500/50 hover:bg-[#08152e]'
-              }`}
-            >
-              {selectedRole === 'admin' && (
-                <div className="absolute top-2 right-2">
-                  <CheckCircle className="w-3.5 h-3.5 text-cyan-400" />
+            {activeTab === 'login' && (
+              <div
+                onClick={() => handleRoleSelect('admin')}
+                className={`relative cursor-pointer p-3 sm:p-4 rounded-2xl border text-center transition-all duration-300 flex flex-col items-center justify-center gap-1.5 ${
+                  selectedRole === 'admin'
+                    ? 'bg-gradient-to-tr from-cyan-950/80 to-blue-900/40 border-cyan-400 shadow-[0_0_25px_rgba(0,242,254,0.4)] scale-[1.02]'
+                    : 'bg-[#060e20] border-cyan-500/20 hover:border-cyan-500/50 hover:bg-[#08152e]'
+                }`}
+              >
+                {selectedRole === 'admin' && (
+                  <div className="absolute top-2 right-2">
+                    <CheckCircle className="w-3.5 h-3.5 text-cyan-400" />
+                  </div>
+                )}
+                <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${
+                  selectedRole === 'admin' ? 'bg-cyan-500/30 text-cyan-300' : 'bg-white/5 text-slate-400'
+                }`}>
+                  <ShieldCheck className="w-5 h-5" />
                 </div>
-              )}
-              <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${
-                selectedRole === 'admin' ? 'bg-cyan-500/30 text-cyan-300' : 'bg-white/5 text-slate-400'
-              }`}>
-                <ShieldCheck className="w-5 h-5" />
+                <span className={`text-xs font-bold ${selectedRole === 'admin' ? 'text-white' : 'text-slate-300'}`}>
+                  Admin
+                </span>
               </div>
-              <span className={`text-xs font-bold ${selectedRole === 'admin' ? 'text-white' : 'text-slate-300'}`}>
-                Admin
-              </span>
-            </div>
+            )}
           </div>
         </div>
 
@@ -462,51 +472,56 @@ export default function AuthPortal({ initialTab, initialMode = 'register', onAut
 
         {/* ----------------- REGISTER TAB FORMS ----------------- */}
         {activeTab === 'register' && (
-          <form onSubmit={handleRegisterSubmit} className="space-y-4 text-left animate-fade-in">
+          <form onSubmit={handleRegisterSubmit} autoComplete="off" className="space-y-4 text-left animate-fade-in">
 
             {/* STUDENT REGISTRATION */}
             {selectedRole === 'student' && (
               <>
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-300 mb-1">Full Name</label>
-                  <input
-                    type="text"
-                    required
-                    value={fullName}
-                    onChange={(e) => setFullName(e.target.value)}
-                    placeholder="Enter student full name"
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-[#060e20] border border-cyan-500/30 text-white placeholder-slate-500 text-xs focus:outline-none focus:border-cyan-300"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-300 mb-1 flex justify-between">
-                    <span>USN (University Seat Number)</span>
-                    <span className="text-[10px] text-cyan-400 font-bold">Must start with 4HG</span>
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={identifier}
-                    onChange={(e) => setIdentifier(e.target.value.toUpperCase())}
-                    placeholder="e.g. 4HG22CS010"
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-[#060e20] border border-cyan-500/30 text-white placeholder-slate-500 text-xs uppercase focus:outline-none focus:border-cyan-300 font-mono"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-300 mb-1">Personal Email Address</label>
-                  <input
-                    type="email"
-                    required
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="personal.email@gmail.com (College email not required)"
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-[#060e20] border border-cyan-500/30 text-white placeholder-slate-500 text-xs focus:outline-none focus:border-cyan-300"
-                  />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-300 mb-1">Full Name *</label>
+                    <input
+                      type="text"
+                      required
+                      autoComplete="off"
+                      value={fullName}
+                      onChange={(e) => setFullName(e.target.value)}
+                      placeholder="Enter student full name"
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-[#060e20] border border-cyan-500/30 text-white placeholder-slate-500 text-xs focus:outline-none focus:border-cyan-300"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-300 mb-1">Email Address *</label>
+                    <input
+                      type="email"
+                      required
+                      autoComplete="off"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="personal.email@gmail.com"
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-[#060e20] border border-cyan-500/30 text-white placeholder-slate-500 text-xs focus:outline-none focus:border-cyan-300"
+                    />
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-300 mb-1">Department / Branch *</label>
+                    <select
+                      required
+                      value={department}
+                      onChange={(e) => setDepartment(e.target.value)}
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-[#060e20] border border-cyan-500/30 text-white text-xs focus:outline-none focus:border-cyan-300"
+                    >
+                      <option value="Computer Science & Engineering">Computer Science & Engineering</option>
+                      <option value="Information Science & Engineering">Information Science & Engineering</option>
+                      <option value="Electronics & Communication Engineering">Electronics & Communication Engineering</option>
+                      <option value="Electrical & Electronics Engineering">Electrical & Electronics Engineering</option>
+                      <option value="Mechanical Engineering">Mechanical Engineering</option>
+                      <option value="Civil Engineering">Civil Engineering</option>
+                      <option value="Other">Other</option>
+                    </select>
+                  </div>
                   <div>
                     <label className="block text-[11px] font-semibold text-slate-300 mb-1">Phone Number</label>
                     <input
@@ -517,38 +532,39 @@ export default function AuthPortal({ initialTab, initialMode = 'register', onAut
                       className="w-full px-3.5 py-2.5 rounded-xl bg-[#060e20] border border-cyan-500/30 text-white placeholder-slate-500 text-xs focus:outline-none focus:border-cyan-300"
                     />
                   </div>
+                </div>
 
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-[11px] font-semibold text-slate-300 mb-1">Semester</label>
+                    <label className="block text-[11px] font-semibold text-slate-300 mb-1">University USN *</label>
+                    <input
+                      type="text"
+                      required
+                      autoComplete="off"
+                      value={identifier}
+                      onChange={(e) => setIdentifier(e.target.value.toUpperCase())}
+                      placeholder="e.g. 4HG22CS010"
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-[#060e20] border border-cyan-500/30 text-white placeholder-slate-500 text-xs uppercase focus:outline-none focus:border-cyan-300 font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-300 mb-1">Current Semester *</label>
                     <select
+                      required
                       value={semester}
                       onChange={(e) => setSemester(e.target.value)}
                       className="w-full px-3.5 py-2.5 rounded-xl bg-[#060e20] border border-cyan-500/30 text-white text-xs focus:outline-none focus:border-cyan-300"
                     >
-                      <option value="1st Sem">1st Semester</option>
-                      <option value="2nd Sem">2nd Semester</option>
-                      <option value="3rd Sem">3rd Semester</option>
-                      <option value="4th Sem">4th Semester</option>
-                      <option value="5th Sem">5th Semester</option>
-                      <option value="6th Sem">6th Semester</option>
-                      <option value="7th Sem">7th Semester</option>
-                      <option value="8th Sem">8th Semester</option>
+                      <option value="1st Semester">1st Semester</option>
+                      <option value="2nd Semester">2nd Semester</option>
+                      <option value="3rd Semester">3rd Semester</option>
+                      <option value="4th Semester">4th Semester</option>
+                      <option value="5th Semester">5th Semester</option>
+                      <option value="6th Semester">6th Semester</option>
+                      <option value="7th Semester">7th Semester</option>
+                      <option value="8th Semester">8th Semester</option>
                     </select>
                   </div>
-                </div>
-
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-300 mb-1">Department</label>
-                  <select
-                    value={department}
-                    onChange={(e) => setDepartment(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-[#060e20] border border-cyan-500/30 text-white text-xs focus:outline-none focus:border-cyan-300"
-                  >
-                    <option value="Computer Science & Engineering">Computer Science & Engineering</option>
-                    <option value="Electronics & Communication">Electronics & Communication</option>
-                    <option value="Mechanical Engineering">Mechanical Engineering</option>
-                    <option value="Civil Engineering">Civil Engineering</option>
-                  </select>
                 </div>
               </>
             )}
@@ -556,46 +572,51 @@ export default function AuthPortal({ initialTab, initialMode = 'register', onAut
             {/* FACULTY REGISTRATION */}
             {selectedRole === 'faculty' && (
               <>
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-300 mb-1">Full Name</label>
-                  <input
-                    type="text"
-                    required
-                    value={fullName}
-                    onChange={(e) => setFullName(e.target.value)}
-                    placeholder="Enter faculty full name (e.g. Dr. Baby H.T.)"
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-[#060e20] border border-cyan-500/30 text-white placeholder-slate-500 text-xs focus:outline-none focus:border-cyan-300"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-300 mb-1 flex justify-between">
-                    <span>Faculty ID</span>
-                    <span className="text-[10px] text-cyan-400 font-bold">Format: GEC-FAC-...</span>
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={identifier}
-                    onChange={(e) => setIdentifier(e.target.value)}
-                    placeholder="e.g. GEC-FAC-102"
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-[#060e20] border border-cyan-500/30 text-white placeholder-slate-500 text-xs uppercase focus:outline-none focus:border-cyan-300 font-mono"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-300 mb-1">Email Address</label>
-                  <input
-                    type="email"
-                    required
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="faculty@gechassan.ac.in"
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-[#060e20] border border-cyan-500/30 text-white placeholder-slate-500 text-xs focus:outline-none focus:border-cyan-300"
-                  />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-300 mb-1">Full Name *</label>
+                    <input
+                      type="text"
+                      required
+                      autoComplete="off"
+                      value={fullName}
+                      onChange={(e) => setFullName(e.target.value)}
+                      placeholder="Enter faculty full name"
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-[#060e20] border border-cyan-500/30 text-white placeholder-slate-500 text-xs focus:outline-none focus:border-cyan-300"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-300 mb-1">Email Address *</label>
+                    <input
+                      type="email"
+                      required
+                      autoComplete="off"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="faculty@gechassan.ac.in"
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-[#060e20] border border-cyan-500/30 text-white placeholder-slate-500 text-xs focus:outline-none focus:border-cyan-300"
+                    />
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-300 mb-1">Department / Branch *</label>
+                    <select
+                      required
+                      value={department}
+                      onChange={(e) => setDepartment(e.target.value)}
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-[#060e20] border border-cyan-500/30 text-white text-xs focus:outline-none focus:border-cyan-300"
+                    >
+                      <option value="Computer Science & Engineering">Computer Science & Engineering</option>
+                      <option value="Information Science & Engineering">Information Science & Engineering</option>
+                      <option value="Electronics & Communication Engineering">Electronics & Communication Engineering</option>
+                      <option value="Electrical & Electronics Engineering">Electrical & Electronics Engineering</option>
+                      <option value="Mechanical Engineering">Mechanical Engineering</option>
+                      <option value="Civil Engineering">Civil Engineering</option>
+                      <option value="Other">Other</option>
+                    </select>
+                  </div>
                   <div>
                     <label className="block text-[11px] font-semibold text-slate-300 mb-1">Phone Number</label>
                     <input
@@ -606,66 +627,38 @@ export default function AuthPortal({ initialTab, initialMode = 'register', onAut
                       className="w-full px-3.5 py-2.5 rounded-xl bg-[#060e20] border border-cyan-500/30 text-white placeholder-slate-500 text-xs focus:outline-none focus:border-cyan-300"
                     />
                   </div>
+                </div>
 
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-[11px] font-semibold text-slate-300 mb-1">Department</label>
+                    <label className="block text-[11px] font-semibold text-slate-300 mb-1">Official Employee ID *</label>
+                    <input
+                      type="text"
+                      required
+                      autoComplete="off"
+                      value={identifier}
+                      onChange={(e) => setIdentifier(e.target.value.toUpperCase())}
+                      placeholder="EMP-CSE-042"
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-[#060e20] border border-cyan-500/30 text-white placeholder-slate-500 text-xs uppercase focus:outline-none focus:border-cyan-300 font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-300 mb-1">Academic Designation *</label>
                     <select
-                      value={department}
-                      onChange={(e) => setDepartment(e.target.value)}
+                      required
+                      value={academicDesignation}
+                      onChange={(e) => setAcademicDesignation(e.target.value)}
                       className="w-full px-3.5 py-2.5 rounded-xl bg-[#060e20] border border-cyan-500/30 text-white text-xs focus:outline-none focus:border-cyan-300"
                     >
-                      <option value="Computer Science & Engineering">Computer Science & Engineering</option>
-                      <option value="Electronics & Communication">Electronics & Communication</option>
-                      <option value="Mechanical Engineering">Mechanical Engineering</option>
-                      <option value="Civil Engineering">Civil Engineering</option>
+                      <option>Assistant Professor</option>
+                      <option>Associate Professor</option>
+                      <option>Professor</option>
+                      <option>Head of Department (HOD)</option>
+                      <option>Lecturer</option>
+                      <option>Senior Assistant Professor</option>
+                      <option>Visiting Faculty</option>
+                      <option>Other</option>
                     </select>
-                  </div>
-                </div>
-              </>
-            )}
-
-            {/* ADMIN REGISTRATION */}
-            {selectedRole === 'admin' && (
-              <>
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-300 mb-1">Full Name</label>
-                  <input
-                    type="text"
-                    required
-                    value={fullName}
-                    onChange={(e) => setFullName(e.target.value)}
-                    placeholder="Administrator Name"
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-[#060e20] border border-cyan-500/30 text-white placeholder-slate-500 text-xs focus:outline-none focus:border-cyan-300"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-300 mb-1">Admin Username / Email</label>
-                  <input
-                    type="email"
-                    required
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="admin.office@gechassan.ac.in"
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-[#060e20] border border-cyan-500/30 text-white placeholder-slate-500 text-xs focus:outline-none focus:border-cyan-300"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-300 mb-1 flex justify-between">
-                    <span>Admin Master Authorization Key</span>
-                    <span className="text-[10px] text-amber-400 font-bold">Institutional Clearance Required</span>
-                  </label>
-                  <input
-                    type="password"
-                    required
-                    value={adminKey}
-                    onChange={(e) => setAdminKey(e.target.value)}
-                    placeholder="Enter Master Provisioning Key"
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-[#060e20] border border-cyan-500/30 text-white placeholder-slate-500 text-xs focus:outline-none focus:border-cyan-300 font-mono"
-                  />
-                  <div className="text-[10px] text-slate-400 mt-1">
-                    System Master Key: <code className="text-cyan-300">GEC-ADMIN-ROOT-2026</code>
                   </div>
                 </div>
               </>
@@ -674,14 +667,15 @@ export default function AuthPortal({ initialTab, initialMode = 'register', onAut
             {/* Common Password & Confirm Password (Shared across register roles) */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
               <div>
-                <label className="block text-[11px] font-semibold text-slate-300 mb-1">Password</label>
+                <label className="block text-[11px] font-semibold text-slate-300 mb-1">Password *</label>
                 <div className="relative">
                   <input
                     type={showPassword ? 'text' : 'password'}
                     required
+                    autoComplete="new-password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Min 6 characters"
+                    placeholder="At least 8 characters"
                     className="w-full pl-3.5 pr-9 py-2.5 rounded-xl bg-[#060e20] border border-cyan-500/30 text-white placeholder-slate-500 text-xs focus:outline-none focus:border-cyan-300"
                   />
                   <button
@@ -695,11 +689,12 @@ export default function AuthPortal({ initialTab, initialMode = 'register', onAut
               </div>
 
               <div>
-                <label className="block text-[11px] font-semibold text-slate-300 mb-1">Confirm Password</label>
+                <label className="block text-[11px] font-semibold text-slate-300 mb-1">Confirm Password *</label>
                 <div className="relative">
                   <input
                     type={showConfirmPassword ? 'text' : 'password'}
                     required
+                    autoComplete="new-password"
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
                     placeholder="Re-enter password"
@@ -716,10 +711,25 @@ export default function AuthPortal({ initialTab, initialMode = 'register', onAut
               </div>
             </div>
 
+            <div className="flex flex-wrap items-center gap-x-5 gap-y-2 rounded-xl border border-cyan-500/25 bg-[#060e20]/80 px-3.5 py-3 text-[11px]" aria-live="polite">
+              <span className={`inline-flex items-center gap-2 ${passwordLengthValid ? 'text-emerald-300' : password ? 'text-red-300' : 'text-slate-400'}`}>
+                {renderPasswordIndicator(passwordLengthValid, password.length > 0)}
+                8+ chars
+              </span>
+              <span className={`inline-flex items-center gap-2 ${passwordLettersAndNumbersValid ? 'text-emerald-300' : password ? 'text-red-300' : 'text-slate-400'}`}>
+                {renderPasswordIndicator(passwordLettersAndNumbersValid, password.length > 0)}
+                Letters &amp; numbers
+              </span>
+              <span className={`inline-flex items-center gap-2 ${passwordsMatch ? 'text-emerald-300' : passwordConfirmationEntered ? 'text-red-300' : 'text-slate-400'}`}>
+                {renderPasswordIndicator(passwordsMatch, passwordConfirmationEntered)}
+                {passwordConfirmationEntered && !passwordsMatch ? 'Passwords do not match' : 'Passwords match'}
+              </span>
+            </div>
+
             {/* Dynamic Register Button per Role */}
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || !passwordLengthValid || !passwordLettersAndNumbersValid || !passwordsMatch}
               className="w-full py-3.5 mt-2 rounded-2xl bg-gradient-to-r from-cyan-400 via-cyan-500 to-blue-600 text-white font-extrabold text-xs tracking-wider shadow-[0_0_25px_rgba(0,242,254,0.6)] hover:shadow-[0_0_35px_rgba(0,242,254,0.9)] hover:scale-[1.01] transition-all cursor-pointer disabled:opacity-50 uppercase"
             >
               {loading
@@ -750,7 +760,7 @@ export default function AuthPortal({ initialTab, initialMode = 'register', onAut
                     required
                     value={identifier}
                     onChange={(e) => setIdentifier(e.target.value)}
-                    placeholder="Enter registered Student Name or USN (e.g. Nithin A or 4HG22CS045)"
+                    placeholder="Enter your registered student name"
                     className="w-full px-3.5 py-2.5 rounded-xl bg-[#060e20] border border-cyan-500/30 text-white placeholder-slate-500 text-xs focus:outline-none focus:border-cyan-300"
                   />
                 </div>
@@ -761,7 +771,7 @@ export default function AuthPortal({ initialTab, initialMode = 'register', onAut
             {selectedRole === 'faculty' && (
               <div>
                 <label className="block text-[11px] font-semibold text-slate-300 mb-1 flex justify-between">
-                  <span>Faculty ID Number</span>
+                  <span>Employee ID or Email</span>
                   <span className="text-[10px] text-cyan-400">Institutional Faculty ID</span>
                 </label>
                 <div className="relative">
@@ -770,7 +780,7 @@ export default function AuthPortal({ initialTab, initialMode = 'register', onAut
                     required
                     value={identifier}
                     onChange={(e) => setIdentifier(e.target.value)}
-                    placeholder="e.g. GEC-FAC-101"
+                    placeholder="e.g. EMP-CSE-042 or faculty email"
                     className="w-full px-3.5 py-2.5 rounded-xl bg-[#060e20] border border-cyan-500/30 text-white placeholder-slate-500 text-xs uppercase focus:outline-none focus:border-cyan-300 font-mono"
                   />
                 </div>

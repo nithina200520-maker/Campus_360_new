@@ -13,6 +13,8 @@ numpy>=1.26.0
 opencv-python-headless>=4.9.0
 Werkzeug>=3.0.0
 scikit-learn>=1.4.0
+bcrypt>=4.1.0
+PyJWT>=2.8.0
 
 # Phase 2: container runtime (used by Docker; not required for local `python run.py`)
 gunicorn>=21.2.0

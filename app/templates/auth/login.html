@@ -343,20 +343,35 @@
     box-shadow: inset 0 0 12px rgba(34, 211, 238, 0.25);
   }
 
-  /* Role Selection Radio Buttons */
-  .role-btn-group .btn-outline-primary {
-    border-color: var(--line);
+  /* Role cards keep public registration choices separate from admin assignment. */
+  .role-card-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.65rem; }
+  .role-card {
+    min-height: 100px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.45rem;
+    padding: 0.65rem 0.35rem;
+    border: 1px solid var(--line);
+    border-radius: 1rem;
     color: var(--ink-dim);
     background: rgba(6, 14, 34, 0.6);
-    font-size: 0.82rem;
-    padding: 0.55rem 0.6rem;
+    cursor: pointer;
+    text-align: center;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease, color 0.2s ease;
   }
-  .role-btn-group .btn-check:checked + .btn-outline-primary {
+  .role-card i { font-size: 1.25rem; }
+  .role-card small { font-size: 0.68rem; line-height: 1.2; }
+  .role-card-grid .btn-check:checked + .role-card {
     background: linear-gradient(90deg, #22d3ee, #3b82f6);
     border-color: var(--cyan);
     color: #ffffff;
     box-shadow: 0 4px 14px rgba(34, 211, 238, 0.4);
   }
+  .role-card-grid .btn-check:focus-visible + .role-card { outline: 2px solid var(--cyan); outline-offset: 2px; }
+  .role-card-disabled { opacity: 0.68; cursor: not-allowed; }
+  @media (max-width: 575.98px) { .role-card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 
   body.login-scene .text-link-light { color: var(--cyan-bright); cursor: pointer; transition: color 0.2s ease; }
   body.login-scene .text-link-light:hover { color: #ffffff; text-decoration: underline !important; }
@@ -441,6 +456,7 @@
     border-radius: 12px;
     padding: 0.65rem 0.85rem;
   }
+  .pw-checklist-box i { transition: color 0.2s ease, transform 0.2s ease; }
 
   /* Responsive: tone down background effects on small screens */
   @media (max-width: 576px) {
@@ -570,7 +586,7 @@
               <div class="d-flex flex-wrap gap-1 justify-content-center">
                 <button type="button" class="btn btn-xs btn-quickfill rounded-pill" onclick="fillCreds('admin@gechassan.ac.in', 'Admin@123')">Main Admin</button>
                 <button type="button" class="btn btn-xs btn-quickfill rounded-pill" onclick="fillCreds('canteen@gechassan.ac.in', 'Canteen@123')">Canteen Admin</button>
-                <button type="button" class="btn btn-xs btn-quickfill rounded-pill" onclick="fillCreds('teacher@gechassan.ac.in', 'Teacher@123')">Teacher</button>
+                <button type="button" class="btn btn-xs btn-quickfill rounded-pill" onclick="fillCreds('teacher@gechassan.ac.in', 'Teacher@123')">Faculty</button>
                 <button type="button" class="btn btn-xs btn-quickfill rounded-pill" onclick="fillCreds('student@gechassan.ac.in', 'Student@123')">Student</button>
                 <button type="button" class="btn btn-xs btn-quickfill rounded-pill" onclick="fillCreds('visitor@gechassan.ac.in', 'Visitor@123')">Visitor</button>
               </div>
@@ -593,21 +609,27 @@
               <!-- Role Selection Buttons -->
               <div class="mb-3">
                 <label class="form-label fw-bold">Select Role <span class="text-danger">*</span></label>
-                <div class="btn-group w-100 shadow-sm role-btn-group" role="group">
+                <div class="role-card-grid" role="group" aria-label="Select your registration role">
                   <input type="radio" class="btn-check" name="role" id="roleStudent" value="student" {% if sel_role == 'student' %}checked{% endif %}>
-                  <label class="btn btn-outline-primary fw-bold" for="roleStudent">
-                    <i class="fa-solid fa-user-graduate me-1"></i> Student
+                  <label class="role-card fw-bold" for="roleStudent">
+                    <i class="fa-solid fa-user-graduate"></i><span>Student</span>
                   </label>
 
                   <input type="radio" class="btn-check" name="role" id="roleTeacher" value="teacher" {% if sel_role == 'teacher' %}checked{% endif %}>
-                  <label class="btn btn-outline-primary fw-bold" for="roleTeacher">
-                    <i class="fa-solid fa-chalkboard-user me-1"></i> Teacher
+                  <label class="role-card fw-bold" for="roleTeacher">
+                    <i class="fa-solid fa-chalkboard-user"></i><span>Faculty</span>
                   </label>
 
                   <input type="radio" class="btn-check" name="role" id="roleVisitor" value="visitor" {% if sel_role == 'visitor' %}checked{% endif %}>
-                  <label class="btn btn-outline-primary fw-bold" for="roleVisitor">
-                    <i class="fa-solid fa-street-view me-1"></i> Visitor
+                  <label class="role-card fw-bold" for="roleVisitor">
+                    <i class="fa-solid fa-street-view"></i><span>Visitor</span>
                   </label>
+
+                  <div class="role-card role-card-disabled" aria-label="Admin roles are assigned by Main Admin">
+                    <i class="fa-solid fa-shield-halved"></i>
+                    <span class="fw-bold">Admin</span>
+                    <small>Assigned by Main Admin</small>
+                  </div>
                 </div>
               </div>
 
@@ -617,7 +639,7 @@
                   <i class="fa-solid fa-shield-halved text-warning"></i>
                   <strong class="text-warning">Faculty Verification Protocol:</strong>
                 </div>
-                <div>Teacher accounts require Employee ID verification by Main Admin to activate Teacher-First Canteen Priority.</div>
+                <div>Faculty accounts require Employee ID verification by Main Admin to activate Faculty-First Canteen Priority.</div>
               </div>
 
               <!-- Visitor Access Guidance Banner -->
@@ -648,11 +670,12 @@
                   <label class="form-label fw-bold">Department / Branch <span class="text-danger">*</span></label>
                   <select name="department" id="departmentInput" class="form-select login-input">
                     <option value="Computer Science & Engineering" {% if sel_dept == 'Computer Science & Engineering' %}selected{% endif %}>Computer Science & Engineering</option>
+                    <option value="Information Science & Engineering" {% if sel_dept == 'Information Science & Engineering' %}selected{% endif %}>Information Science & Engineering</option>
                     <option value="Electronics & Communication Engineering" {% if sel_dept == 'Electronics & Communication Engineering' %}selected{% endif %}>Electronics & Communication Engineering</option>
+                    <option value="Electrical & Electronics Engineering" {% if sel_dept == 'Electrical & Electronics Engineering' %}selected{% endif %}>Electrical & Electronics Engineering</option>
                     <option value="Mechanical Engineering" {% if sel_dept == 'Mechanical Engineering' %}selected{% endif %}>Mechanical Engineering</option>
                     <option value="Civil Engineering" {% if sel_dept == 'Civil Engineering' %}selected{% endif %}>Civil Engineering</option>
-                    <option value="Basic Science & Humanities" {% if sel_dept == 'Basic Science & Humanities' %}selected{% endif %}>Basic Science & Humanities</option>
-                    <option value="Campus Administration" {% if sel_dept == 'Campus Administration' %}selected{% endif %}>Campus Administration</option>
+                    <option value="Other" {% if sel_dept == 'Other' %}selected{% endif %}>Other</option>
                   </select>
                 </div>
                 <div class="col-md-5">
@@ -669,8 +692,8 @@
                   <input type="text" name="usn" id="usnInput" class="form-control login-input text-uppercase" placeholder="4HG24CS037" value="{{ form_data.get('usn', '') if form_data else '' }}">
                 </div>
                 <div class="col-md-5">
-                  <label class="form-label fw-bold">Current Semester</label>
-                  <select name="semester" class="form-select login-input">
+                  <label class="form-label fw-bold">Current Semester <span class="text-danger">*</span></label>
+                  <select name="semester" id="semesterInput" class="form-select login-input">
                     {% for sem in ['1st Semester', '2nd Semester', '3rd Semester', '4th Semester', '5th Semester', '6th Semester', '7th Semester', '8th Semester'] %}
                       <option value="{{ sem }}" {% if sel_sem == sem %}selected{% endif %}>{{ sem }}</option>
                     {% endfor %}
@@ -687,8 +710,8 @@
                 </div>
                 <div class="col-md-6">
                   <label class="form-label fw-bold">Academic Designation <span class="text-danger">*</span></label>
-                  <select name="designation" class="form-select login-input">
-                    {% for d in ['Assistant Professor', 'Associate Professor', 'Professor', 'Professor & HOD', 'Technical Instructor'] %}
+                  <select name="designation" id="designationInput" class="form-select login-input">
+                    {% for d in ['Assistant Professor', 'Associate Professor', 'Professor', 'Head of Department (HOD)', 'Lecturer', 'Senior Assistant Professor', 'Visiting Faculty', 'Other'] %}
                       <option value="{{ d }}" {% if sel_desig == d %}selected{% endif %}>{{ d }}</option>
                     {% endfor %}
                   </select>
@@ -712,11 +735,17 @@
               <div class="row g-2 mb-2">
                 <div class="col-md-6">
                   <label class="form-label fw-bold">Password <span class="text-danger">*</span></label>
-                  <input type="password" id="regPassword" name="password" class="form-control login-input" placeholder="••••••••" required autocomplete="new-password">
+                  <div class="input-group">
+                    <input type="password" id="regPassword" name="password" class="form-control login-input" placeholder="At least 8 characters" required autocomplete="new-password">
+                    <button type="button" class="btn login-input" aria-label="Show password" onclick="togglePasswordVisibility('regPassword', this)"><i class="fa-solid fa-eye"></i></button>
+                  </div>
                 </div>
                 <div class="col-md-6">
                   <label class="form-label fw-bold">Confirm Password <span class="text-danger">*</span></label>
-                  <input type="password" id="regConfirmPassword" name="confirm_password" class="form-control login-input" placeholder="••••••••" required autocomplete="new-password">
+                  <div class="input-group">
+                    <input type="password" id="regConfirmPassword" name="confirm_password" class="form-control login-input" placeholder="••••••••" required autocomplete="new-password">
+                    <button type="button" class="btn login-input" aria-label="Show confirmation password" onclick="togglePasswordVisibility('regConfirmPassword', this)"><i class="fa-solid fa-eye"></i></button>
+                  </div>
                 </div>
               </div>
 
@@ -751,6 +780,15 @@
 function fillCreds(email, pwd) {
   document.getElementById('emailInput').value = email;
   document.getElementById('passwordInput').value = pwd;
+}
+
+function togglePasswordVisibility(inputId, button) {
+  const input = document.getElementById(inputId);
+  if (!input) return;
+  const visible = input.type === 'password';
+  input.type = visible ? 'text' : 'password';
+  button.setAttribute('aria-label', visible ? 'Hide password' : 'Show password');
+  button.innerHTML = visible ? '<i class="fa-solid fa-eye-slash"></i>' : '<i class="fa-solid fa-eye"></i>';
 }
 
 // Show a loading spinner on the real submit button (does not alter submission or auth)
@@ -820,6 +858,9 @@ function updateRoleFields() {
 
   const usnInput = document.getElementById('usnInput');
   const empIdInput = document.getElementById('empIdInput');
+  const departmentInput = document.getElementById('departmentInput');
+  const semesterInput = document.getElementById('semesterInput');
+  const designationInput = document.getElementById('designationInput');
 
   if (isStudent) {
     if (teacherAdvisory) teacherAdvisory.classList.add('d-none');
@@ -831,6 +872,9 @@ function updateRoleFields() {
 
     if (usnInput) { usnInput.required = true; usnInput.disabled = false; }
     if (empIdInput) { empIdInput.required = false; empIdInput.disabled = true; }
+    if (departmentInput) { departmentInput.required = true; departmentInput.disabled = false; }
+    if (semesterInput) { semesterInput.required = true; semesterInput.disabled = false; }
+    if (designationInput) { designationInput.required = false; designationInput.disabled = true; }
   } else if (isTeacher) {
     if (teacherAdvisory) teacherAdvisory.classList.remove('d-none');
     if (visitorAdvisory) visitorAdvisory.classList.add('d-none');
@@ -841,6 +885,9 @@ function updateRoleFields() {
 
     if (usnInput) { usnInput.required = false; usnInput.disabled = true; }
     if (empIdInput) { empIdInput.required = true; empIdInput.disabled = false; }
+    if (departmentInput) { departmentInput.required = true; departmentInput.disabled = false; }
+    if (semesterInput) { semesterInput.required = false; semesterInput.disabled = true; }
+    if (designationInput) { designationInput.required = true; designationInput.disabled = false; }
   } else if (isVisitor) {
     if (teacherAdvisory) teacherAdvisory.classList.add('d-none');
     if (visitorAdvisory) visitorAdvisory.classList.remove('d-none');
@@ -851,6 +898,9 @@ function updateRoleFields() {
 
     if (usnInput) { usnInput.required = false; usnInput.disabled = true; }
     if (empIdInput) { empIdInput.required = false; empIdInput.disabled = true; }
+    if (departmentInput) { departmentInput.required = false; departmentInput.disabled = true; }
+    if (semesterInput) { semesterInput.required = false; semesterInput.disabled = true; }
+    if (designationInput) { designationInput.required = false; designationInput.disabled = true; }
   }
 }
 
@@ -871,6 +921,8 @@ function checkPassword() {
   if (!pwInput || !confirmPwInput) return;
   const val = pwInput.value || '';
   const confirmVal = confirmPwInput.value || '';
+  const hasValidPassword = val.length >= 8 && /[A-Za-z]/.test(val) && /\d/.test(val);
+  pwInput.setCustomValidity(val && !hasValidPassword ? 'Password must be at least 8 characters and contain letters and numbers.' : '');
 
   // Length check (>= 8)
   if (val.length >= 8) {
@@ -878,7 +930,9 @@ function checkPassword() {
     pwLenCheck.innerHTML = '<i class="fa-solid fa-circle-check me-1"></i> 8+ chars';
   } else {
     pwLenCheck.className = val.length > 0 ? 'text-danger' : 'text-muted';
-    pwLenCheck.innerHTML = '<i class="fa-regular fa-circle me-1"></i> 8+ chars';
+    pwLenCheck.innerHTML = val.length > 0
+      ? '<i class="fa-solid fa-circle-xmark me-1"></i> 8+ chars'
+      : '<i class="fa-regular fa-circle me-1"></i> 8+ chars';
   }
 
   // Alpha + Numeric check
@@ -889,7 +943,9 @@ function checkPassword() {
     pwAlphaNumCheck.innerHTML = '<i class="fa-solid fa-circle-check me-1"></i> Letters &amp; numbers';
   } else {
     pwAlphaNumCheck.className = val.length > 0 ? 'text-danger' : 'text-muted';
-    pwAlphaNumCheck.innerHTML = '<i class="fa-regular fa-circle me-1"></i> Letters &amp; numbers';
+    pwAlphaNumCheck.innerHTML = val.length > 0
+      ? '<i class="fa-solid fa-circle-xmark me-1"></i> Letters &amp; numbers'
+      : '<i class="fa-regular fa-circle me-1"></i> Letters &amp; numbers';
   }
 
   // Match check
@@ -927,6 +983,7 @@ document.addEventListener('DOMContentLoaded', function() {
   } else {
     updateRoleFields();
   }
+  checkPassword();
 });
 </script>
 {% endblock %}

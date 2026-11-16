@@ -12,7 +12,8 @@ USE smart_campus_360;
 
 -- ------------------------------------------------------------------------------
 -- 1. USERS & ROLE-BASED ACCESS CONTROL (RBAC)
--- Roles: main_admin, canteen_admin, teacher, student, visitor
+-- Base roles: main_admin, canteen_admin, teacher, student, visitor.
+-- Scoped admin access is stored separately so faculty keep their account role.
 -- ------------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS users (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -20,6 +21,7 @@ CREATE TABLE IF NOT EXISTS users (
     email VARCHAR(120) NOT NULL UNIQUE,
     password_hash VARCHAR(255) NOT NULL,
     role ENUM('main_admin', 'canteen_admin', 'teacher', 'student', 'visitor') NOT NULL DEFAULT 'student',
+    admin_scope VARCHAR(30) NULL COMMENT 'Optional scoped admin module: lost_found, navigation, or canteen',
     department VARCHAR(100) NULL COMMENT 'e.g. CSE, ECE, ME, Civil, Basic Science, Admin',
     phone VARCHAR(20) NULL,
     usn_or_emp_id VARCHAR(50) NULL COMMENT 'University USN for students, Employee ID for teachers/staff',
@@ -34,6 +36,7 @@ CREATE TABLE IF NOT EXISTS users (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_user_role (role),
     INDEX idx_user_email (email),
+    UNIQUE KEY uq_users_role_identifier (role, usn_or_emp_id),
     INDEX idx_reset_token (reset_token)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 

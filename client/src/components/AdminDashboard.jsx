@@ -864,12 +864,12 @@ export default function AdminDashboard({ currentUser, onNavigate, onLogout, onBa
               <div className="space-y-3 text-xs">
                 <div className="p-4 rounded-2xl bg-[#060e20] border border-blue-500/20 flex justify-between items-center">
                   <div>
-                    <div className="font-bold text-white">Admin Master Clearance Key</div>
-                    <div className="text-slate-400 text-[11px]">Required for provisioning new administrator accounts</div>
+                    <div className="font-bold text-white">Administrator Provisioning</div>
+                    <div className="text-slate-400 text-[11px]">Admin roles are assigned through authenticated user management</div>
                   </div>
-                  <code className="px-3 py-1 rounded-xl bg-black/80 text-cyan-300 border border-cyan-500/30 font-mono font-bold">
-                    GEC-ADMIN-ROOT-2026
-                  </code>
+                  <span className="px-3 py-1 rounded-xl bg-black/80 text-cyan-300 border border-cyan-500/30 font-mono font-bold">
+                    No public provisioning key
+                  </span>
                 </div>
 
                 <div className="p-4 rounded-2xl bg-[#060e20] border border-blue-500/20 flex justify-between items-center">
