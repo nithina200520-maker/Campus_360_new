@@ -1,0 +1,271 @@
+{% extends "base.html" %}
+
+{% block title %}Exam Room Finder{% endblock %}
+
+{% block extra_head %}
+<style>
+  /* Same neon smart-city scene as the campus navigator (colors only) */
+  body.nav-scene {
+    background:
+      radial-gradient(900px 500px at 88% 4%, rgba(255, 61, 104, 0.18), transparent 60%),
+      radial-gradient(800px 600px at 50% 120%, rgba(79, 70, 229, 0.30), transparent 60%),
+      linear-gradient(160deg, #12142a 0%, #1a1d3a 45%, #0f1128 100%) fixed;
+  }
+  body.nav-scene main { color: #e7ebff; }
+  body.nav-scene .text-dark { color: #ffffff !important; }
+  body.nav-scene .text-muted, body.nav-scene .text-secondary { color: rgba(210, 216, 245, 0.72) !important; }
+  body.nav-scene .campus-card {
+    position: relative;
+    background: rgba(18, 20, 42, 0.72);
+    border: 1px solid transparent;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    box-shadow: 0 10px 30px -12px rgba(0, 0, 0, 0.6), 0 0 18px rgba(123, 92, 255, 0.18);
+  }
+  body.nav-scene .campus-card::before {
+    content: "";
+    position: absolute; inset: 0; border-radius: 14px; padding: 1.5px;
+    background: linear-gradient(120deg, #4facfe, #7b5cff, #ff3d68, #43e9d6, #4facfe);
+    background-size: 300% 300%;
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor; mask-composite: exclude;
+    animation: examShine 8s linear infinite; pointer-events: none;
+  }
+  @keyframes examShine {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+  }
+  body.nav-scene .form-control {
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(140, 150, 220, 0.35);
+    color: #ffffff;
+  }
+  body.nav-scene .form-control::placeholder { color: rgba(200, 205, 240, 0.5); }
+  body.nav-scene .form-control:focus {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: #7b5cff;
+    color: #ffffff;
+    box-shadow: 0 0 0 0.2rem rgba(123, 92, 255, 0.25);
+  }
+  body.nav-scene .input-group-text {
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(140, 150, 220, 0.35);
+    color: #9fb0ff;
+  }
+  body.nav-scene .btn-primary {
+    background: linear-gradient(90deg, #4facfe 0%, #7b5cff 55%, #a24bff 100%);
+    border: none; color: #fff; font-weight: 700;
+    box-shadow: 0 8px 22px -8px rgba(123, 92, 255, 0.75), 0 0 14px rgba(79, 172, 254, 0.35);
+    transition: all 0.2s ease;
+  }
+  body.nav-scene .btn-primary:hover { color: #fff; transform: translateY(-2px); }
+  body.nav-scene .btn-outline-secondary { color: #dbe2ff; border-color: rgba(140, 150, 220, 0.5); }
+  body.nav-scene .btn-outline-secondary:hover { background: rgba(123, 92, 255, 0.22); color: #fff; border-color: #7b5cff; }
+
+  /* Exam date chip */
+  .exam-date-chip {
+    min-width: 74px;
+    background: linear-gradient(160deg, rgba(79, 172, 254, 0.18), rgba(123, 92, 255, 0.22));
+    border: 1px solid rgba(140, 150, 220, 0.4);
+    border-radius: 14px;
+    text-align: center;
+    padding: 0.55rem 0.4rem;
+  }
+  .exam-date-chip .d { font-size: 1.5rem; font-weight: 800; line-height: 1; color: #fff; }
+  .exam-date-chip .m { font-size: 0.72rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #9fb0ff; }
+  .exam-date-chip .w { font-size: 0.66rem; color: rgba(210, 216, 245, 0.7); }
+
+  .exam-hall-badge {
+    background: rgba(67, 233, 214, 0.14);
+    border: 1px solid rgba(67, 233, 214, 0.45);
+    color: #7ff3e0;
+  }
+  .exam-today-badge {
+    background: linear-gradient(90deg, #ff3d68, #ff7a3d);
+    color: #fff;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-lg-4 py-4" style="max-width: 1100px;">
+
+  <div class="d-flex flex-wrap justify-content-between align-items-center mb-3">
+    <div>
+      <span class="badge bg-primary px-3 py-1 rounded-pill mb-1">
+        <i class="fa-solid fa-door-open me-1"></i> Campus Navigation &bull; Exam Room Finder
+      </span>
+      <h2 class="fw-bold text-dark mb-0">Where is my exam hall &mdash; and when?</h2>
+      <p class="text-muted small mb-0">
+        {% if has_personal_list %}
+          {{ user.full_name }}
+          {% if user.usn_or_emp_id %}&bull; {{ user.usn_or_emp_id }}{% endif %}
+          {% if user.department %}&bull; {{ user.department }}{% endif %}
+          {% if user.semester %}&bull; {{ user.semester }}{% endif %}
+          &mdash; these allotments were published by the Main Admin for you.
+        {% else %}
+          Admin preview of the <b>full published timetable</b> (every audience).
+        {% endif %}
+      </p>
+    </div>
+    <div class="d-flex align-items-center gap-2 mt-2 mt-md-0">
+      <a href="{{ url_for('notifications.index', module='exam') }}" class="btn btn-sm btn-outline-secondary rounded-pill">
+        <i class="fa-solid fa-bell me-1"></i> Exam Alerts
+      </a>
+      <a href="{{ url_for('navigation.index') }}" class="btn btn-sm btn-outline-secondary rounded-pill">
+        <i class="fa-solid fa-map me-1"></i> Campus Map
+      </a>
+    </div>
+  </div>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for category, message in messages %}
+      <div class="alert alert-{{ category }} rounded-3 py-2 small">{{ message }}</div>
+    {% endfor %}
+  {% endwith %}
+
+  <!-- Search across the visible timetable -->
+  <form method="GET" class="mb-4">
+    <div class="input-group input-group-sm" style="max-width: 460px;">
+      <span class="input-group-text rounded-start-pill"><i class="fa-solid fa-magnifying-glass"></i></span>
+      <input type="text" name="q" value="{{ search_query }}" class="form-control" placeholder="Search subject code, name or hall...">
+      <button class="btn btn-primary rounded-pill px-3" type="submit">Search</button>
+    </div>
+  </form>
+
+  <!-- ================= UPCOMING ================= -->
+  <h5 class="fw-bold text-dark mb-3"><i class="fa-solid fa-calendar-day text-warning me-2"></i>Upcoming Exams</h5>
+  {% if upcoming %}
+    {% for s in upcoming %}
+    <div class="card campus-card border-0 shadow-sm p-3 mb-3">
+      <div class="d-flex flex-wrap gap-3 align-items-center">
+        <div class="exam-date-chip">
+          <div class="m">{{ s.exam_date.strftime('%b') }}</div>
+          <div class="d">{{ s.exam_date.strftime('%d') }}</div>
+          <div class="w">{{ s.exam_date.strftime('%A') }}</div>
+        </div>
+        <div class="flex-grow-1" style="min-width: 220px;">
+          <div class="d-flex align-items-center gap-2 flex-wrap mb-1">
+            <span class="badge bg-primary rounded-pill">{{ s.subject_code }}</span>
+            <span class="fw-bold text-dark fs-6">{{ s.subject_name }}</span>
+            {% if s.exam_date == today %}<span class="badge exam-today-badge rounded-pill">TODAY &mdash; GO NOW</span>{% endif %}
+          </div>
+          <div class="small text-muted">
+            <i class="fa-regular fa-clock me-1"></i><b class="text-dark">{{ s.time_window }}</b>
+            &nbsp;<i class="fa-solid fa-users me-1 ms-2"></i>{{ s.audience_role.title() }}s{% if s.department %} &bull; {{ s.department }}{% if s.semester %} {{ s.semester }}{% endif %}{% endif %}
+          </div>
+          <div class="mt-2 d-flex align-items-center gap-2 flex-wrap">
+            <span class="badge exam-hall-badge rounded-pill px-3 py-2">
+              <i class="fa-solid fa-door-open me-1"></i>
+              {% if s.room_number %}Room {{ s.room_number }} &bull; {% endif %}{{ s.room.name if s.room else 'Hall to be announced' }}
+              {% if s.room %}&bull; {{ s.room.building }}, {{ s.room.floor }}{% endif %}
+            </span>
+            {% if s.attachment_url %}
+            <a href="{{ s.attachment_url }}" target="_blank" rel="noopener" class="badge rounded-pill px-3 py-2 text-decoration-none" style="background: rgba(79,172,254,0.16); border:1px solid rgba(79,172,254,0.5); color:#9fc6ff;">
+              <i class="fa-solid fa-file-pdf me-1"></i>Exam Notice
+            </a>
+            {% endif %}
+          </div>
+          {% if s.instructions %}
+          <div class="small text-muted mt-2"><i class="fa-solid fa-circle-info text-info me-1"></i>{{ s.instructions }}</div>
+          {% endif %}
+        </div>
+        {% if s.room %}
+        <div class="d-flex flex-column gap-2 ms-auto">
+          <a href="{{ url_for('navigation.index', dest=s.room_node_id) }}" class="btn btn-primary btn-sm rounded-pill px-3 fw-bold text-nowrap">
+            <i class="fa-solid fa-route me-1"></i> Route to My Hall
+          </a>
+          <a href="{{ url_for('navigation.index') }}" class="btn btn-sm btn-outline-secondary rounded-pill text-nowrap">
+            <i class="fa-solid fa-map me-1"></i> View on Map
+          </a>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  {% else %}
+    <div class="card campus-card border-0 shadow-sm p-4 mb-4 text-center">
+      <i class="fa-solid fa-mug-hot fa-2x text-muted opacity-50 mb-2"></i>
+      {% if search_query %}
+        <p class="text-muted mb-1">No exams match "<b>{{ search_query }}</b>"{% if has_personal_list %} in your allotments{% endif %}.</p>
+      {% elif has_personal_list %}
+        <p class="text-muted mb-1">No upcoming exams are allotted to you right now.</p>
+      {% else %}
+        <p class="text-muted mb-1">No exam allotments have been published yet.</p>
+      {% endif %}
+      <p class="small text-muted mb-0">When the Main Admin publishes a hall allotment, it appears here and an alert arrives in your <a href="{{ url_for('notifications.index', module='exam') }}">Notifications &rsaquo; Exam</a> tab.</p>
+    </div>
+  {% endif %}
+
+  <!-- ================= BRANCH-WISE TIMETABLE (read-only) ================= -->
+  {% if branch_matrix %}
+  <h5 class="fw-bold text-dark mt-4 mb-1"><i class="fa-solid fa-table-columns text-info me-2"></i>Branch-wise Timetable</h5>
+  <p class="small text-muted mb-3">
+    {% if has_personal_list %}
+      Your branch column only &mdash; view-only allotment. To change anything, contact the Exam Cell.
+    {% else %}
+      Every branch column (admin preview).
+    {% endif %}
+  </p>
+  {% for block in branch_matrix %}
+    <div class="mb-2"><span class="badge exam-hall-badge rounded-pill px-3 py-1"><i class="fa-regular fa-calendar me-1"></i>{{ block.date.strftime('%A, %d %b %Y') }}</span></div>
+    <div class="d-flex flex-nowrap overflow-auto pb-2 gap-2 mb-3">
+      {% for col in block.columns %}
+      <div class="card campus-card border-0 shadow-sm p-2 flex-shrink-0" style="min-width: 230px; max-width: 260px;">
+        <div class="fw-bold text-dark border-bottom pb-1 mb-2" style="border-color: rgba(140,150,220,0.35) !important;">
+          <i class="fa-solid fa-building-columns text-primary me-1"></i>{{ col.branch }}
+        </div>
+        {% for s in col.exams %}
+        <div class="small mb-2 pb-2" style="border-bottom: 1px dashed rgba(140,150,220,0.25);">
+          <div class="d-flex align-items-center gap-2 mb-1">
+            <span class="badge bg-primary rounded-pill">{{ s.subject_code }}</span>
+            {% if s.exam_date == today %}<span class="badge exam-today-badge rounded-pill">TODAY</span>{% endif %}
+          </div>
+          <div class="fw-bold text-dark">{{ s.subject_name }}</div>
+          <div class="mt-1"><i class="fa-solid fa-door-open me-1" style="color:#7ff3e0"></i><b class="text-dark">{% if s.room_number %}Room {{ s.room_number }}{% else %}{{ s.room.name if s.room else 'TBA' }}{% endif %}</b>{% if s.room %}<span class="text-muted"> &bull; {{ s.room.name }}</span>{% endif %}</div>
+          <div class="text-muted"><i class="fa-regular fa-clock me-1"></i>{{ s.time_window }}</div>
+          {% if s.semester %}<div class="text-muted"><i class="fa-solid fa-user-graduate me-1"></i>{{ s.semester }}</div>{% endif %}
+          <div class="d-flex align-items-center gap-2 mt-1 flex-wrap">
+            {% if s.room %}<a href="{{ url_for('navigation.index', dest=s.room_node_id) }}" class="btn btn-primary btn-sm rounded-pill fw-bold" style="font-size:.72rem;"><i class="fa-solid fa-route me-1"></i>Route</a>{% endif %}
+            {% if s.attachment_url %}<a href="{{ s.attachment_url }}" target="_blank" rel="noopener" class="small text-decoration-none" style="color:#9fc6ff;"><i class="fa-solid fa-file-pdf me-1"></i>Notice</a>{% endif %}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      {% endfor %}
+    </div>
+  {% endfor %}
+  {% endif %}
+
+  <!-- ================= RECENTLY COMPLETED ================= -->
+  {% if past %}
+  <h5 class="fw-bold text-dark mt-4 mb-3"><i class="fa-solid fa-clock-rotate-left text-secondary me-2"></i>Recently Completed</h5>
+  {% for s in past %}
+  <div class="card campus-card border-0 shadow-sm p-3 mb-2 opacity-75">
+    <div class="d-flex flex-wrap align-items-center gap-3">
+      <div class="flex-grow-1">
+        <span class="badge bg-secondary rounded-pill me-1">{{ s.subject_code }}</span>
+        <span class="fw-bold text-dark small">{{ s.subject_name }}</span>
+        <div class="small text-muted">
+          {{ s.exam_date.strftime('%d %b %Y') }} &bull; {{ s.time_window }}
+          &bull; {% if s.room_number %}Room {{ s.room_number }}, {% endif %}{{ s.room.name if s.room else '-' }}
+        </div>
+      </div>
+      <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill"><i class="fa-solid fa-check me-1"></i>Done</span>
+    </div>
+  </div>
+  {% endfor %}
+  {% endif %}
+
+  {% if current_user and current_user.is_main_admin() %}
+  <div class="alert alert-info small mt-4 rounded-3">
+    <i class="fa-solid fa-shield-halved me-1"></i>You are seeing the complete timetable. Manage allotments in the
+    <a href="{{ url_for('admin.manage_exam_schedule') }}" class="fw-bold">Exam Room Finder Manager</a>.
+  </div>
+  {% endif %}
+</div>
+
+<script>document.body.classList.add('nav-scene');</script>
+{% endblock %}

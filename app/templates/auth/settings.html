@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Smart Campus 360 | Settings | GEC Mosalehosahalli</title>
+
+  <!-- Apply the saved theme before first paint so there is no flash.
+       Server-side ui_prefs is only a fallback for a fresh device. -->
+  <script>
+    (function () {
+      var server = {{ (ui_prefs or {}) | tojson }};
+      try {
+        var t = localStorage.getItem('sc360-theme') || server.theme || 'dark';
+        document.documentElement.setAttribute('data-theme', t);
+        var a = localStorage.getItem('sc360-accent') || server.accent || 'cyan';
+        if (a && a !== 'cyan') document.documentElement.setAttribute('data-accent', a);
+        var m = server.motion || 'full';
+        if (m === 'calm') document.documentElement.setAttribute('data-motion', 'calm');
+      } catch (e) { document.documentElement.setAttribute('data-theme', 'dark'); }
+    })();
+  </script>
+
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+
+  <style>
+    /* ---------- Settings page, scoped to this screen only ---------- */
+    .st-head { display:flex; align-items:flex-end; justify-content:space-between; gap:16px; flex-wrap:wrap; margin-bottom:22px; }
+    .st-head h1 { margin:0; font-size:clamp(1.5rem,2.6vw,2rem); font-weight:800; letter-spacing:-.5px; color:var(--sc-ink); }
+    .st-head p { margin:6px 0 0; color:var(--sc-ink-soft); font-size:.9rem; max-width:62ch; }
+    .st-kicker { display:inline-flex; align-items:center; gap:8px; font-size:.68rem; font-weight:800; letter-spacing:1.3px;
+      text-transform:uppercase; color:var(--sc-primary); background:var(--sc-glass-2); border:1px solid var(--sc-glass-brd);
+      padding:5px 12px; border-radius:999px; margin-bottom:10px; }
+
+    .st-grid { display:grid; gap:18px; grid-template-columns:repeat(2,minmax(0,1fr)); align-items:start; }
+    @media (max-width:1080px) { .st-grid { grid-template-columns:1fr; } }
+    .st-wrap { max-width:1120px; margin:0 auto; }
+
+    .st-card { position:relative; background:var(--sc-glass); border:1px solid var(--sc-glass-brd); border-radius:20px;
+      box-shadow:var(--sc-shadow-soft); backdrop-filter:blur(14px) saturate(150%); -webkit-backdrop-filter:blur(14px) saturate(150%);
+      padding:20px 22px 22px; overflow:hidden; }
+    .st-card::before { content:""; position:absolute; inset:0 auto auto 0; width:100%; height:3px;
+      background:linear-gradient(90deg,var(--sc-primary),var(--sc-sky),transparent); opacity:.85; }
+    .st-card-head { display:flex; align-items:center; gap:12px; margin-bottom:6px; }
+    .st-card-head .sc-ic { width:38px; height:38px; border-radius:12px; display:grid; place-items:center; color:#fff; font-size:.95rem; flex:0 0 38px; }
+    .st-card-head h2 { margin:0; font-size:1.02rem; font-weight:800; color:var(--sc-ink); }
+    .st-card-head small { display:block; color:var(--sc-ink-soft); font-weight:600; font-size:.74rem; margin-top:2px; }
+    .st-desc { color:var(--sc-ink-soft); font-size:.82rem; margin:0 0 16px; }
+
+    .st-field { margin-bottom:14px; }
+    .st-field label { display:block; font-size:.74rem; font-weight:700; letter-spacing:.4px; text-transform:uppercase;
+      color:var(--sc-ink-soft); margin-bottom:6px; }
+    .st-field input[type=text], .st-field select {
+      width:100%; background:var(--sc-glass-2); border:1px solid var(--sc-glass-brd); border-radius:12px;
+      padding:11px 13px; color:var(--sc-ink); font-size:.92rem; font-family:inherit; outline:none;
+      transition:border-color .2s ease, box-shadow .2s ease, background .2s ease; }
+    .st-field input[type=text]:focus, .st-field select:focus {
+      border-color:var(--sc-primary); box-shadow:0 0 0 3px rgba(var(--sc-primary-rgb,56,189,248),.22); background:var(--sc-glass); }
+    .st-field .hint { display:block; margin-top:5px; font-size:.72rem; color:var(--sc-ink-soft); }
+    .st-field.locked input { opacity:.62; cursor:not-allowed; }
+    .st-row { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+    @media (max-width:560px) { .st-row { grid-template-columns:1fr; } }
+
+    /* Switch rows */
+    .st-switch { display:flex; align-items:flex-start; gap:14px; padding:13px 0; border-top:1px solid var(--sc-line); }
+    .st-switch:first-of-type { border-top:0; padding-top:2px; }
+    .st-switch .st-txt { flex:1; min-width:0; }
+    .st-switch .st-txt b { display:block; color:var(--sc-ink); font-size:.9rem; font-weight:700; }
+    .st-switch .st-txt span { display:block; color:var(--sc-ink-soft); font-size:.76rem; margin-top:3px; line-height:1.45; }
+    .st-toggle { position:relative; flex:0 0 46px; width:46px; height:26px; margin-top:2px; }
+    .st-toggle input { position:absolute; opacity:0; inset:0; width:100%; height:100%; margin:0; cursor:pointer; z-index:2; }
+    .st-toggle .track { position:absolute; inset:0; border-radius:999px; background:var(--sc-glass-2);
+      border:1px solid var(--sc-glass-brd); transition:background .22s ease, border-color .22s ease; }
+    .st-toggle .knob { position:absolute; top:3px; left:3px; width:20px; height:20px; border-radius:50%;
+      background:var(--sc-ink-soft); transition:transform .22s cubic-bezier(.2,.8,.2,1), background .22s ease; }
+    .st-toggle input:checked ~ .track { background:linear-gradient(120deg,var(--sc-primary),var(--sc-sky)); border-color:transparent; }
+    .st-toggle input:checked ~ .knob { transform:translateX(20px); background:#fff; }
+    .st-toggle input:focus-visible ~ .track { box-shadow:0 0 0 3px rgba(56,189,248,.3); }
+
+    /* Segmented pickers */
+    .st-seg { display:inline-flex; gap:4px; padding:4px; border-radius:14px; background:var(--sc-glass-2);
+      border:1px solid var(--sc-glass-brd); flex-wrap:wrap; }
+    .st-seg label { position:relative; }
+    .st-seg input { position:absolute; opacity:0; inset:0; cursor:pointer; }
+    .st-seg span { display:inline-flex; align-items:center; gap:7px; padding:8px 15px; border-radius:10px; font-size:.82rem;
+      font-weight:700; color:var(--sc-ink-soft); cursor:pointer; transition:background .2s ease, color .2s ease; text-transform:none;
+      letter-spacing:0; }
+    .st-seg input:checked + span { background:linear-gradient(120deg,var(--sc-primary),var(--sc-sky)); color:#fff; }
+    .st-seg input:focus-visible + span { box-shadow:0 0 0 3px rgba(56,189,248,.3); }
+
+    /* Accent swatches */
+    .st-swatches { display:flex; gap:10px; flex-wrap:wrap; }
+    .st-swatches label { position:relative; display:flex; align-items:center; gap:9px; padding:8px 14px 8px 9px; border-radius:12px;
+      background:var(--sc-glass-2); border:1px solid var(--sc-glass-brd); cursor:pointer; font-size:.8rem; font-weight:700;
+      color:var(--sc-ink-soft); text-transform:none; letter-spacing:0; margin:0; transition:border-color .2s ease, color .2s ease; }
+    .st-swatches input { position:absolute; opacity:0; inset:0; cursor:pointer; }
+    .st-swatches i { width:18px; height:18px; border-radius:6px; display:block; box-shadow:inset 0 0 0 1px rgba(255,255,255,.35); }
+    .st-swatches label:hover { color:var(--sc-ink); }
+    .st-swatches input:checked + i { outline:2px solid var(--sc-ink); outline-offset:1px; }
+    .st-swatches label:has(input:checked) { border-color:var(--sc-primary); color:var(--sc-ink); }
+
+    /* Sticky save bar */
+    .st-savebar { position:sticky; bottom:16px; z-index:20; display:flex; align-items:center; gap:14px; margin-top:20px;
+      padding:14px 18px; border-radius:18px; background:var(--sc-glass); border:1px solid var(--sc-glass-brd);
+      box-shadow:var(--sc-shadow); backdrop-filter:blur(16px) saturate(160%); -webkit-backdrop-filter:blur(16px) saturate(160%); }
+    .st-savebar .st-state { flex:1; font-size:.82rem; font-weight:700; color:var(--sc-ink-soft); display:flex; align-items:center; gap:9px; }
+    .st-savebar .st-state i { color:var(--sc-green,#34d399); }
+    .st-btn { display:inline-flex; align-items:center; gap:9px; border:0; border-radius:12px; padding:11px 20px; font-size:.86rem;
+      font-weight:800; font-family:inherit; cursor:pointer; text-decoration:none; transition:transform .18s ease, box-shadow .18s ease, opacity .18s ease; }
+    .st-btn.primary { color:#fff; background:linear-gradient(120deg,var(--sc-primary),var(--sc-sky));
+      box-shadow:0 10px 24px -10px rgba(56,189,248,.75); }
+    .st-btn.primary:hover { transform:translateY(-2px); box-shadow:0 14px 30px -10px rgba(56,189,248,.9); }
+    .st-btn.ghost { background:var(--sc-glass-2); border:1px solid var(--sc-glass-brd); color:var(--sc-ink); }
+    .st-btn.ghost:hover { border-color:var(--sc-primary); }
+    .st-btn.danger { background:rgba(244,63,94,.14); border:1px solid rgba(244,63,94,.4); color:#fda4af; }
+    .st-btn.danger:hover { background:rgba(244,63,94,.24); }
+    .st-btn:disabled { opacity:.5; cursor:not-allowed; transform:none; }
+
+    .st-note { display:flex; gap:10px; padding:12px 14px; border-radius:14px; font-size:.78rem; line-height:1.5;
+      background:var(--sc-glass-2); border:1px solid var(--sc-glass-brd); color:var(--sc-ink-soft); margin-top:14px; }
+    .st-note i { margin-top:2px; color:var(--sc-primary); flex:0 0 auto; }
+    .st-note b { color:var(--sc-ink); }
+
+    /* Accent themes chosen in Settings > Appearance (applied to this page live) */
+    html[data-accent="violet"]   { --sc-primary:#a78bfa; --sc-primary-2:#8b5cf6; --sc-sky:#c4b5fd; }
+    html[data-accent="emerald"]  { --sc-primary:#34d399; --sc-primary-2:#10b981; --sc-sky:#6ee7b7; }
+    html[data-accent="amber"]    { --sc-primary:#fbbf24; --sc-primary-2:#f59e0b; --sc-sky:#fcd34d; }
+    /* Calm motion: stop the heavy background animation */
+    html[data-motion="calm"] .sc-snow, html[data-motion="calm"] .sc-galaxy { display:none; }
+    html[data-motion="calm"] .sc-flake { animation:none !important; }
+  </style>
+</head>
+<body class="sc360-body">
+
+  <div class="sc-scrim" id="scScrim"></div>
+  <div class="sc-snow" id="scSnow" aria-hidden="true"></div>
+  <div class="sc-galaxy" aria-hidden="true">
+    <div class="gx-stars"></div>
+    <div class="gx-disk">
+      <div class="gx-arms"></div>
+      <div class="gx-core"></div>
+    </div>
+    <div class="gx-orbit o1"><span class="gx-planet"></span></div>
+    <div class="gx-orbit o2"><span class="gx-planet"></span></div>
+    <div class="gx-orbit o3"><span class="gx-planet"></span></div>
+  </div>
+
+  <!-- ============================= SIDEBAR ============================= -->
+  <aside class="sc-sidebar">
+    <a class="sc-brand" href="{{ url_for('main.index') }}">
+      <span class="sc-brand-photo">
+        <img src="{{ url_for('static', filename='images/college_entrance.jpg') }}" alt="Government Engineering College, Mosalehosahalli - entrance front view">
+        <span class="sc-brand-3d"><i class="fa-solid fa-school"></i></span>
+      </span>
+      <span class="sc-brand-txt">
+        <strong>Smart Campus <span>360</span></strong>
+        <small>Navigate &middot; Find &middot; Book</small>
+      </span>
+    </a>
+
+    <a class="sc-nav" href="{{ url_for('main.index') }}"><i class="fa-solid fa-house"></i> Dashboard</a>
+    <a class="sc-nav" href="{{ url_for('navigation.index') }}"><i class="fa-solid fa-location-dot"></i> Campus Navigation</a>
+    <a class="sc-nav" href="{{ url_for('lost_found.index') }}"><i class="fa-solid fa-box-archive"></i> Lost &amp; Found</a>
+    <a class="sc-nav" href="{{ url_for('canteen.index') }}"><i class="fa-solid fa-utensils"></i> Smart Canteen</a>
+
+    <div class="sc-side-sep"></div>
+
+    <a class="sc-nav" href="{{ url_for('canteen.my_orders') }}"><i class="fa-solid fa-clipboard-list"></i> My Bookings</a>
+    <a class="sc-nav" href="{{ url_for('lost_found.my_reports') }}"><i class="fa-solid fa-file-lines"></i> My Reports</a>
+    <a class="sc-nav" href="{{ url_for('notifications.index') }}">
+      <i class="fa-solid fa-bell"></i> Notifications
+      {% if unread_notifications %}<span class="sc-pill">{{ unread_notifications }}</span>{% endif %}
+    </a>
+
+    <div class="sc-side-sep"></div>
+
+    <a class="sc-nav" href="{{ url_for('auth.profile') }}"><i class="fa-solid fa-user"></i> Profile</a>
+    <a class="sc-nav active" href="{{ url_for('auth.settings') }}"><i class="fa-solid fa-gear"></i> Settings</a>
+    <a class="sc-nav" href="{{ url_for('main.about') }}"><i class="fa-solid fa-circle-question"></i> Help &amp; Support</a>
+
+    {% if current_user and current_user.is_main_admin() %}
+    <a class="sc-nav" href="{{ url_for('admin.dashboard') }}"><i class="fa-solid fa-shield-halved" style="color:var(--sc-rose)"></i> Main Admin Hub</a>
+    {% endif %}
+    {% if current_user and current_user.is_canteen_admin() %}
+    <a class="sc-nav" href="{{ url_for('canteen_admin.dashboard') }}"><i class="fa-solid fa-kitchen-set" style="color:var(--sc-green)"></i> Canteen Operator Hub</a>
+    {% endif %}
+
+    <a class="sc-side-photo" href="{{ COLLEGE_MAPS_URL }}" target="_blank" rel="noopener noreferrer"
+       title="Open our exact location in Google Maps">
+      <img src="{{ url_for('static', filename='images/college_gate.jpg') }}" alt="GEC Mosalehosahalli campus gate">
+      <div class="sc-cap"><i class="fa-solid fa-location-dot"></i> Government Engineering College, Hassan
+        <i class="fa-solid fa-arrow-up-right-from-square ms-auto"></i>
+      </div>
+    </a>
+  </aside>
+
+  <!-- ============================= MAIN ============================= -->
+  <div class="sc-main">
+
+    <header class="sc-topbar">
+      <button class="sc-icon-btn sc-hamb" id="scHamb" aria-label="Toggle menu"><i class="fa-solid fa-bars"></i></button>
+      <a class="sc-search" href="{{ url_for('main.index') }}" style="text-decoration:none">
+        <i class="fa-solid fa-arrow-left"></i>
+        <span style="color:var(--sc-ink-soft)">Back to Dashboard</span>
+      </a>
+      <div class="sc-top-actions">
+        <button class="sc-icon-btn" id="themeToggle" title="Toggle theme" aria-label="Toggle light or dark theme">
+          <i class="fa-solid fa-moon" id="themeIcon"></i>
+        </button>
+        {% if current_user %}
+        <div class="sc-dd">
+          <a class="sc-user" href="#" data-dd-toggle>
+            <span class="sc-avatar">{{ current_user.full_name[:1]|upper }}</span>
+            <span style="text-align:left">
+              <span class="sc-uname">{{ current_user.role.replace('_',' ')|title }}</span>
+              <span class="sc-urole">{{ current_user.email }}</span>
+            </span>
+            <i class="fa-solid fa-chevron-down" style="font-size:0.7rem;color:var(--sc-ink-soft)"></i>
+          </a>
+          <div class="sc-dd-menu" style="width:220px">
+            <a class="sc-dd-item" href="{{ url_for('auth.profile') }}"><i class="fa-solid fa-id-card"></i> My Profile</a>
+            <a class="sc-dd-item" href="{{ url_for('auth.settings') }}"><i class="fa-solid fa-gear"></i> Settings</a>
+            <div class="sc-dd-sep"></div>
+            <a class="sc-dd-item danger" href="{{ url_for('auth.logout') }}"><i class="fa-solid fa-right-from-bracket"></i> Sign Out</a>
+          </div>
+        </div>
+        {% endif %}
+      </div>
+    </header>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+        <div class="sc-flash {{ 'danger' if category in ('error','danger') else category }}">
+          <i class="fa-solid {% if category == 'success' %}fa-circle-check{% elif category in ('error','danger') %}fa-triangle-exclamation{% elif category == 'warning' %}fa-circle-exclamation{% else %}fa-circle-info{% endif %}"></i>{{ message }}
+        </div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    <!-- ============================= SETTINGS FORM ============================= -->
+    <main class="st-wrap">
+      <div class="st-head">
+        <div>
+          <span class="st-kicker"><i class="fa-solid fa-sliders"></i> Personalization</span>
+          <h1>Settings</h1>
+          <p>Tune how Smart Campus 360 looks, when it alerts you, and what the portal
+             shares about you. Everything here is private to your account.</p>
+        </div>
+      </div>
+
+      <form method="post" id="settingsForm">
+        <div class="st-grid">
+
+          <!-- ---------- Account ---------- -->
+          <section class="st-card">
+            <div class="st-card-head">
+              <span class="sc-ic" style="background:linear-gradient(135deg,#38bdf8,#6366f1)"><i class="fa-solid fa-id-badge"></i></span>
+              <div><h2>Account</h2><small>How others see you on campus</small></div>
+            </div>
+            <p class="st-desc">Your name and contact details appear on Lost &amp; Found reports and canteen orders.</p>
+            <div class="st-field">
+              <label for="fName">Display Name</label>
+              <input type="text" id="fName" name="full_name" value="{{ user.full_name }}" maxlength="120">
+              <span class="hint">Shown publicly on your Lost &amp; Found reports and on canteen order tickets.</span>
+            </div>
+            <div class="st-field locked">
+              <label for="fEmail">Email Address</label>
+              <input type="text" id="fEmail" value="{{ user.email }}" disabled title="Email is managed by the campus administration">
+              <span class="hint"><i class="fa-solid fa-lock"></i> Contact the main admin to change your login email.</span>
+            </div>
+            <div class="st-row">
+              <div class="st-field">
+                <label for="fPhone">Contact Phone</label>
+                <input type="text" id="fPhone" name="phone" value="{{ user.phone or '' }}" maxlength="20" placeholder="e.g. 86602 89831">
+              </div>
+              <div class="st-field">
+                <label for="fDept">Department</label>
+                <input type="text" id="fDept" name="department" value="{{ user.department or '' }}" maxlength="100">
+              </div>
+            </div>
+            {% if user.role == 'student' %}
+            <div class="st-field">
+              <label for="fSem">Current Semester</label>
+              <input type="text" id="fSem" name="semester" value="{{ user.semester or '' }}" maxlength="20" placeholder="e.g. 5th Semester">
+            </div>
+            {% else %}
+            <div class="st-field locked">
+              <label>Semester</label>
+              <input type="text" value="Not applicable for your role" disabled>
+            </div>
+            {% endif %}
+          </section>
+
+          <!-- ---------- Alerts ---------- -->
+          <section class="st-card">
+            <div class="st-card-head">
+              <span class="sc-ic" style="background:linear-gradient(135deg,#f59e0b,#ef4444)"><i class="fa-solid fa-bell"></i></span>
+              <div><h2>Alerts</h2><small>Which notifications reach your bell</small></div>
+            </div>
+            <p class="st-desc">Switch a group off and its alerts stop appearing in your notification history and unread badge. Nothing is deleted &mdash; turn it back on anytime.</p>
+
+            <div class="st-switch">
+              <div class="st-txt"><b>Lost &amp; Found</b><span>New lost-item alerts, finder notifications, claim updates and item returns.</span></div>
+              <label class="st-toggle"><input type="checkbox" name="notif_lost_found" {% if user.notif_prefs.get('lost_found', true) %}checked{% endif %}><span class="track"></span><span class="knob"></span></label>
+            </div>
+            <div class="st-switch">
+              <div class="st-txt"><b>Smart Canteen</b><span>Order confirmations, ready-for-pickup QR alerts and menu changes.</span></div>
+              <label class="st-toggle"><input type="checkbox" name="notif_canteen" {% if user.notif_prefs.get('canteen', true) %}checked{% endif %}><span class="track"></span><span class="knob"></span></label>
+            </div>
+            <div class="st-switch">
+              <div class="st-txt"><b>Exam Room Finder</b><span>Exam hall allotments, date &amp; time announcements and room changes.</span></div>
+              <label class="st-toggle"><input type="checkbox" name="notif_exam" {% if user.notif_prefs.get('exam', true) %}checked{% endif %}><span class="track"></span><span class="knob"></span></label>
+            </div>
+            <div class="st-switch">
+              <div class="st-txt"><b>Account &amp; Campus</b><span>Verification status, admin announcements and system notices.</span></div>
+              <label class="st-toggle"><input type="checkbox" name="notif_other" {% if user.notif_prefs.get('other', true) %}checked{% endif %}><span class="track"></span><span class="knob"></span></label>
+            </div>
+
+            <div class="st-note"><i class="fa-solid fa-circle-info"></i>
+              <span>Critical account notices (password resets, admin suspensions) are always delivered regardless of these switches.</span>
+            </div>
+          </section>
+
+          <!-- ---------- Appearance ---------- -->
+          <section class="st-card">
+            <div class="st-card-head">
+              <span class="sc-ic" style="background:linear-gradient(135deg,#a78bfa,#38bdf8)"><i class="fa-solid fa-palette"></i></span>
+              <div><h2>Appearance</h2><small>Theme, accent and motion &mdash; previewed live</small></div>
+            </div>
+            <p class="st-desc">Changes apply instantly on this page so you can preview before saving. They follow your account across devices.</p>
+
+            <div class="st-field">
+              <label>Mode</label>
+              <div class="st-seg" data-live="theme">
+                {% for t in theme_choices %}
+                <label><input type="radio" name="theme" value="{{ t }}" {% if user.ui_prefs.get('theme') == t %}checked{% endif %}>
+                  <span><i class="fa-solid {% if t == 'dark' %}fa-moon{% else %}fa-sun{% endif %}"></i> {{ t|title }}</span></label>
+                {% endfor %}
+              </div>
+            </div>
+
+            <div class="st-field">
+              <label>Accent Colour</label>
+              <div class="st-swatches" data-live="accent">
+                {% set swatch = {'cyan': '#38bdf8', 'violet': '#a78bfa', 'emerald': '#34d399', 'amber': '#fbbf24'} %}
+                {% for a in accent_choices %}
+                <label><input type="radio" name="accent" value="{{ a }}" {% if user.ui_prefs.get('accent') == a %}checked{% endif %}>
+                  <i style="background:{{ swatch[a] }}"></i>{{ a|title }}</label>
+                {% endfor %}
+              </div>
+            </div>
+
+            <div class="st-field">
+              <label>Motion</label>
+              <div class="st-seg" data-live="motion">
+                {% for m in motion_choices %}
+                <label><input type="radio" name="motion" value="{{ m }}" {% if user.ui_prefs.get('motion') == m %}checked{% endif %}>
+                  <span><i class="fa-solid {% if m == 'full' %}fa-wand-magic-sparkles{% else %}fa-feather-pointed{% endif %}"></i> {{ 'Full animation' if m == 'full' else 'Calm (no background effects)' }}</span></label>
+                {% endfor %}
+              </div>
+            </div>
+
+            <div class="st-switch">
+              <div class="st-txt"><b>Glow &amp; glass effects</b><span>Neon borders and frosted panels across the dashboard.</span></div>
+              <label class="st-toggle"><input type="checkbox" name="fx_effects" {% if user.ui_prefs.get('effects', true) %}checked{% endif %}><span class="track"></span><span class="knob"></span></label>
+            </div>
+          </section>
+
+          <!-- ---------- Privacy ---------- -->
+          <section class="st-card">
+            <div class="st-card-head">
+              <span class="sc-ic" style="background:linear-gradient(135deg,#10b981,#0ea5e9)"><i class="fa-solid fa-user-shield"></i></span>
+              <div><h2>Privacy</h2><small>Who can see your contact details</small></div>
+            </div>
+            <p class="st-desc">Lost &amp; Found now connects people directly: a lost report is broadcast to the whole campus, and anyone who finds it notifies you with their own contact details. Your name and number are shown publicly on your reports so a finder can reach you.</p>
+
+            <div class="st-switch">
+              <div class="st-txt"><b>Show my contact on my Lost &amp; Found reports</b><span>On: your phone is visible to anyone viewing your reports, so finders can contact you straight away. Off: it is hidden and coordination goes through campus administration.</span></div>
+              <label class="st-toggle"><input type="checkbox" name="reveal_contact" {% if user.reveals_contact_to_matches() %}checked{% endif %}><span class="track"></span><span class="knob"></span></label>
+            </div>
+
+            <div class="st-note"><i class="fa-solid fa-shield-halved"></i>
+              <span>Your email, USN and profile page are <b>never</b> exposed to other students &mdash; only the contact number above, and never to strangers or visitors.</span>
+            </div>
+          </section>
+
+          <!-- ---------- Data & security ---------- -->
+          <section class="st-card" style="grid-column:1/-1">
+            <div class="st-card-head">
+              <span class="sc-ic" style="background:linear-gradient(135deg,#64748b,#38bdf8)"><i class="fa-solid fa-database"></i></span>
+              <div><h2>Data &amp; Security</h2><small>Your records, always yours</small></div>
+            </div>
+            <p class="st-desc">Download a machine-readable copy of everything the portal stores about you &mdash; profile, reports, claims, matches, orders and alerts.</p>
+            <div style="display:flex; gap:12px; flex-wrap:wrap">
+              <a class="st-btn ghost" href="{{ url_for('auth.export_data') }}"><i class="fa-solid fa-file-arrow-down"></i> Export my data (JSON)</a>
+              <a class="st-btn ghost" href="{{ url_for('auth.forgot_password') }}"><i class="fa-solid fa-key"></i> Change password</a>
+            </div>
+          </section>
+        </div>
+
+        <!-- ---------- Sticky save bar ---------- -->
+        <div class="st-savebar">
+          <span class="st-state" id="stState"><i class="fa-solid fa-circle-check"></i> All changes saved</span>
+          <a class="st-btn ghost" href="{{ url_for('auth.settings') }}" id="stDiscard"><i class="fa-solid fa-rotate-left"></i> Discard</a>
+          <button class="st-btn primary" type="submit" id="stSave"><i class="fa-solid fa-floppy-disk"></i> Save settings</button>
+        </div>
+      </form>
+    </main>
+  </div>
+
+  <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+  <script>
+    (function () {
+      var root = document.documentElement;
+      var THEME_KEY = 'sc360-theme', ACCENT_KEY = 'sc360-accent';
+      var state = document.getElementById('stState');
+      var dirty = false;
+
+      function setState(icon, text) {
+        if (!state) return;
+        state.innerHTML = '<i class="fa-solid ' + icon + '"></i> ' + text;
+      }
+
+      /* Live preview: reflect picker changes on this page instantly */
+      function bindLive(name, apply) {
+        document.querySelectorAll('input[name="' + name + '"]').forEach(function (inp) {
+          inp.addEventListener('change', function () { apply(inp.value, inp); });
+        });
+      }
+      bindLive('theme', function (v) {
+        root.setAttribute('data-theme', v);
+        try { localStorage.setItem(THEME_KEY, v); } catch (e) {}
+      });
+      bindLive('accent', function (v) {
+        if (v === 'cyan') root.removeAttribute('data-accent');
+        else root.setAttribute('data-accent', v);
+        try { localStorage.setItem(ACCENT_KEY, v); } catch (e) {}
+      });
+      bindLive('motion', function (v) {
+        if (v === 'calm') root.setAttribute('data-motion', 'calm');
+        else root.removeAttribute('data-motion');
+      });
+
+      /* Dirty tracking for the sticky save bar */
+      var form = document.getElementById('settingsForm');
+      if (form) {
+        form.addEventListener('input', function () {
+          if (!dirty) { dirty = true; setState('fa-circle-dot', 'Unsaved changes'); }
+        });
+        form.addEventListener('submit', function () {
+          setState('fa-spinner fa-spin', 'Saving\u2026');
+        });
+      }
+      var discard = document.getElementById('stDiscard');
+      if (discard) discard.addEventListener('click', function (ev) {
+        // Reload back to the stored values; confirm only when there is work to lose.
+        if (dirty && !confirm('Discard your unsaved changes?')) ev.preventDefault();
+      });
+    })();
+  </script>
+</body>
+</html>

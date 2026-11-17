@@ -1,0 +1,469 @@
+{% extends "base.html" %}
+
+{% block title %}Smart Campus Navigation{% endblock %}
+
+{% block extra_head %}
+<!-- Pannellum: lightweight WebGL 360° equirectangular panorama viewer -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pannellum@2.5.6/build/pannellum.css">
+<script defer src="https://cdn.jsdelivr.net/npm/pannellum@2.5.6/build/pannellum.js"></script>
+<style>
+  .node-pin-card {
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+  .node-pin-card:hover {
+    border-color: var(--primary);
+    background-color: #eff6ff;
+  }
+
+  /* ===== Neon smart-city re-theme for the navigation page (styling only) ===== */
+  body.nav-scene {
+    background:
+      radial-gradient(900px 500px at 88% 4%, rgba(255, 61, 104, 0.18), transparent 60%),
+      radial-gradient(800px 600px at 50% 120%, rgba(79, 70, 229, 0.30), transparent 60%),
+      linear-gradient(160deg, #12142a 0%, #1a1d3a 45%, #0f1128 100%) fixed;
+  }
+  body.nav-scene main { color: #e7ebff; }
+  body.nav-scene .text-dark { color: #ffffff !important; }
+  body.nav-scene .text-muted, body.nav-scene .text-secondary { color: rgba(210, 216, 245, 0.72) !important; }
+
+  /* Glass cards with shining gradient border */
+  body.nav-scene .campus-card {
+    position: relative;
+    background: rgba(18, 20, 42, 0.72);
+    border: 1px solid transparent;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    box-shadow: 0 10px 30px -12px rgba(0, 0, 0, 0.6), 0 0 18px rgba(123, 92, 255, 0.18);
+  }
+  body.nav-scene .campus-card::before {
+    content: "";
+    position: absolute; inset: 0; border-radius: 14px; padding: 1.5px;
+    background: linear-gradient(120deg, #4facfe, #7b5cff, #ff3d68, #43e9d6, #4facfe);
+    background-size: 300% 300%;
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor; mask-composite: exclude;
+    animation: navShine 8s linear infinite; pointer-events: none;
+  }
+  @keyframes navShine {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+  }
+
+  body.nav-scene .badge.bg-primary {
+    background: linear-gradient(90deg, #4facfe, #7b5cff) !important;
+    box-shadow: 0 4px 14px -4px rgba(123, 92, 255, 0.6);
+  }
+
+  /* Form controls */
+  body.nav-scene .form-control,
+  body.nav-scene .form-select {
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(140, 150, 220, 0.35);
+    color: #ffffff;
+  }
+  body.nav-scene .form-control::placeholder { color: rgba(200, 205, 240, 0.5); }
+  body.nav-scene .form-control:focus, body.nav-scene .form-select:focus {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: #7b5cff;
+    color: #ffffff;
+    box-shadow: 0 0 0 0.2rem rgba(123, 92, 255, 0.25);
+  }
+  body.nav-scene .form-select option { background: #1a1d3a; color: #ffffff; }
+  body.nav-scene .input-group-text {
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(140, 150, 220, 0.35);
+    color: #9fb0ff;
+  }
+  body.nav-scene .input-group-text.bg-light { background: rgba(255, 255, 255, 0.06) !important; }
+
+  /* Buttons */
+  body.nav-scene .btn-primary {
+    background: linear-gradient(90deg, #4facfe 0%, #7b5cff 55%, #a24bff 100%);
+    border: none; color: #fff; font-weight: 700;
+    box-shadow: 0 8px 22px -8px rgba(123, 92, 255, 0.75), 0 0 14px rgba(79, 172, 254, 0.35);
+    transition: all 0.2s ease;
+  }
+  body.nav-scene .btn-primary:hover { color: #fff; transform: translateY(-2px); }
+  body.nav-scene .btn-outline-primary { color: #9fb0ff; border-color: rgba(140, 150, 220, 0.5); }
+  body.nav-scene .btn-check:checked + .btn-outline-primary {
+    background: linear-gradient(90deg, #4facfe, #7b5cff);
+    border-color: #7b5cff; color: #fff;
+  }
+  body.nav-scene .btn-outline-secondary { color: #dbe2ff; border-color: rgba(140, 150, 220, 0.5); }
+  body.nav-scene .btn-outline-secondary:hover { background: rgba(123, 92, 255, 0.22); color: #fff; border-color: #7b5cff; }
+
+  /* Location directory cards */
+  body.nav-scene .node-pin-card { border-color: rgba(140, 150, 220, 0.35) !important; background: rgba(255, 255, 255, 0.03); }
+  body.nav-scene .node-pin-card:hover { border-color: #7b5cff !important; background: rgba(123, 92, 255, 0.18) !important; }
+  body.nav-scene .node-pin-card .badge.bg-secondary { background: rgba(255, 255, 255, 0.1) !important; color: #dbe2ff !important; }
+
+  /* Map canvas frame */
+  body.nav-scene .map-canvas-container {
+    border: 1px solid rgba(123, 92, 255, 0.5);
+    box-shadow: 0 0 22px rgba(123, 92, 255, 0.25), inset 0 2px 8px rgba(0, 0, 0, 0.4);
+  }
+
+  /* Directions */
+  body.nav-scene .direction-step-card { background: rgba(255, 255, 255, 0.05); border-left-color: #7b5cff; }
+  body.nav-scene .direction-step-card:hover { background: rgba(123, 92, 255, 0.16); }
+  body.nav-scene .direction-step-card .text-dark { color: #fff !important; }
+
+  /* Turn-by-turn steps: real photograph + room/location name, clearly visible */
+  .step-thumb {
+    width: 92px; height: 92px; flex-shrink: 0;
+    object-fit: cover; border-radius: 12px; cursor: pointer;
+    border: 1px solid rgba(140, 150, 220, 0.45);
+    box-shadow: 0 6px 16px -6px rgba(0, 0, 0, 0.6);
+    transition: transform 0.15s ease, outline-color 0.15s ease;
+    outline: 2px solid transparent; outline-offset: 1px;
+  }
+  .step-thumb:hover { transform: scale(1.04); outline-color: #4facfe; }
+  .step-destination { font-weight: 800; font-size: 1.02rem; color: #ffffff; line-height: 1.15; }
+  body:not(.nav-scene) .step-destination { color: #1a1d3a; }
+  .step-instruction { font-size: 0.88rem; color: #dbe2ff; margin: 2px 0; }
+  body:not(.nav-scene) .step-instruction { color: #334155; }
+  .step-meta { font-size: 0.78rem; color: rgba(210, 216, 245, 0.75); }
+  body:not(.nav-scene) .step-meta { color: #64748b; }
+  .step-pov-btn { flex-shrink: 0; }
+  .route-start-card { border-left-color: #43e9d6 !important; }
+  .route-destination-card { border-left-color: #ef476f !important; }
+  body.nav-scene .route-destination-card { background: rgba(239, 71, 111, 0.14); }
+  body.nav-scene .route-destination-card:hover { background: rgba(239, 71, 111, 0.24); }
+
+  /* 360° panorama viewer fills the Street-View viewport */
+  .sv-pano { position: absolute; inset: 0; width: 100%; height: 100%; background: #0f172a; z-index: 1; }
+  .sv-pano.pannellum-container { cursor: grab; }
+  .sv-pano-hint {
+    position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
+    z-index: 5; background: rgba(15, 23, 42, 0.72); color: #fff;
+    font-size: 0.72rem; padding: 3px 12px; border-radius: 999px; pointer-events: none;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-lg-4 py-2">
+
+  <!-- Header & Calibration Notice -->
+  <div class="d-flex flex-wrap justify-content-between align-items-center mb-3">
+    <div>
+      <span class="badge bg-primary px-3 py-1 rounded-pill mb-1">
+        <i class="fa-solid fa-compass me-1"></i> Module 1: Campus Navigation
+      </span>
+      <h2 class="fw-bold text-dark mb-0">Interactive Campus Navigator & Route Finder</h2>
+      <p class="text-muted small mb-0">Search classrooms, labs, HOD chambers, offices, and view Street View photo waypoints</p>
+    </div>
+    <div class="d-flex align-items-center gap-2 mt-2 mt-md-0">
+      {% if (current_user and current_user.is_main_admin()) or (user and user.is_main_admin()) %}
+        <!-- ADMIN CONTROLS: Displayed in place of calibration badge for Admin only -->
+        <div class="dropdown">
+          <button class="btn btn-sm btn-danger dropdown-toggle rounded-pill shadow-sm px-3 py-1 fw-bold d-flex align-items-center gap-2" 
+                  type="button" id="adminModifyDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+            <i class="fa-solid fa-user-shield"></i>
+            <span>Admin Options • Modify Every Data</span>
+          </button>
+          <ul class="dropdown-menu dropdown-menu-end shadow-lg border-0 p-2" aria-labelledby="adminModifyDropdown" style="min-width: 320px;">
+            <li class="dropdown-header text-uppercase text-danger fw-bold small pb-1">
+              <i class="fa-solid fa-screwdriver-wrench me-1"></i> Administrator Map Controls
+            </li>
+            <li>
+              <a class="dropdown-item rounded-2 py-2 d-flex align-items-start gap-2" href="{{ url_for('admin.manage_navigation') }}">
+                <i class="fa-solid fa-pen-to-square text-primary mt-1"></i>
+                <div>
+                  <div class="fw-bold small text-dark">Modify Every Location &amp; Photo</div>
+                  <div class="text-muted" style="font-size: 0.75rem;">Edit names, coordinates, publish state &amp; replace photos</div>
+                </div>
+              </a>
+            </li>
+            <li>
+              <a class="dropdown-item rounded-2 py-2 d-flex align-items-start gap-2" href="{{ url_for('admin.manage_navigation') }}#addNodeCard">
+                <i class="fa-solid fa-circle-plus text-success mt-1"></i>
+                <div>
+                  <div class="fw-bold small text-dark">Add New Campus Location</div>
+                  <div class="text-muted" style="font-size: 0.75rem;">Create rooms, assign map coordinates &amp; upload photo</div>
+                </div>
+              </a>
+            </li>
+            <li>
+              <a class="dropdown-item rounded-2 py-2 d-flex align-items-start gap-2" href="{{ url_for('admin.manage_navigation') }}#addPathCard">
+                <i class="fa-solid fa-route text-info mt-1"></i>
+                <div>
+                  <div class="fw-bold small text-dark">Connect Walkable Paths</div>
+                  <div class="text-muted" style="font-size: 0.75rem;">Link photos with distance &amp; directional hints</div>
+                </div>
+              </a>
+            </li>
+            <li>
+              <a class="dropdown-item rounded-2 py-2 d-flex align-items-start gap-2" href="{{ url_for('admin.manage_navigation') }}#floorPlanCard">
+                <i class="fa-solid fa-layer-group text-warning mt-1"></i>
+                <div>
+                  <div class="fw-bold small text-dark">Upload Digital Floor Plans</div>
+                  <div class="text-muted" style="font-size: 0.75rem;">Attach blueprint layouts per building / floor</div>
+                </div>
+              </a>
+            </li>
+            <li>
+              <a class="dropdown-item rounded-2 py-2 d-flex align-items-start gap-2" href="{{ url_for('admin.manage_navigation') }}#csvImportCard">
+                <i class="fa-solid fa-file-csv text-secondary mt-1"></i>
+                <div>
+                  <div class="fw-bold small text-dark">Bulk CSV Data Import</div>
+                  <div class="text-muted" style="font-size: 0.75rem;">Import rooms and connections via spreadsheet</div>
+                </div>
+              </a>
+            </li>
+            <li><hr class="dropdown-divider my-2"></li>
+            <li>
+              <a class="dropdown-item rounded-2 py-2 d-flex align-items-center justify-content-between text-danger fw-bold small" href="{{ url_for('admin.dashboard') }}">
+                <span><i class="fa-solid fa-gauge-high me-2"></i>Master Admin Dashboard</span>
+                <i class="fa-solid fa-arrow-right fa-xs"></i>
+              </a>
+            </li>
+          </ul>
+        </div>
+        <a href="{{ url_for('admin.manage_navigation') }}" class="btn btn-sm btn-outline-danger rounded-pill shadow-sm py-1 px-3 fw-bold" title="Open Campus Map Manager">
+          <i class="fa-solid fa-pen me-1"></i> Edit Map Data
+        </a>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="row g-3">
+    
+    <!-- Left Navigation Controls & Search Sidebar -->
+    <div class="col-lg-4 col-xl-3">
+      <!-- Digital Map / Floor Plan Selector -->
+      <div class="card campus-card border-0 shadow-sm p-3 mb-3">
+        <h6 class="fw-bold text-dark mb-2"><i class="fa-solid fa-layer-group text-warning me-2"></i>Digital Map &amp; Floor Plans</h6>
+        <div class="row g-2">
+          <div class="col-6">
+            <select id="filterBuilding" class="form-select form-select-sm">
+              <option value="">All Buildings</option>
+              {% for b in buildings %}<option value="{{ b }}">{{ b }}</option>{% endfor %}
+            </select>
+          </div>
+          <div class="col-6">
+            <select id="filterFloor" class="form-select form-select-sm">
+              <option value="">All Floors</option>
+              {% for f in ['Ground Floor','1st Floor','2nd Floor','3rd Floor','Campus Grounds'] %}<option value="{{ f }}">{{ f }}</option>{% endfor %}
+            </select>
+          </div>
+        </div>
+        {% if floor_plans %}
+        <select id="floorPlanSelect" class="form-select form-select-sm mt-2 d-none">
+          <option value="">-- Open Uploaded Floor Plan --</option>
+          {% for p in floor_plans %}<option value="{{ p.image_url }}" data-title="{{ p.building }} • {{ p.floor }}">{{ p.title }} ({{ p.building }} - {{ p.floor }})</option>{% endfor %}
+        </select>
+        {% endif %}
+        <button id="btnBackToCampusMap" class="btn btn-sm btn-outline-secondary rounded-pill w-100 mt-2 d-none">
+          <i class="fa-solid fa-map me-1"></i> Back to Full Campus Map
+        </button>
+      </div>
+
+      <div class="card campus-card border-0 shadow-sm p-3 mb-3">
+        <h6 class="fw-bold text-dark mb-1"><i class="fa-solid fa-route text-primary me-2"></i>Photo Route Guide</h6>
+        <p class="small text-muted mb-3">Choose a start and a destination &mdash; the best walking route is found automatically and shown photo by photo.</p>
+
+        <!-- Start Location -->
+        <div class="mb-3">
+          <label class="form-label small fw-bold text-secondary">Source (Start Here)</label>
+          <select id="startNodeSelect" class="form-select form-select-sm">
+            <option value="">-- Choose Starting Point --</option>
+            {% for n in nodes %}
+              <option value="{{ n.id }}" {% if n.node_code == 'NODE_MAIN_GATE' %}selected{% endif %}>
+                {{ n.name }} ({{ n.building }} - {{ n.floor }})
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <!-- Destination -->
+        <div class="mb-3">
+          <label class="form-label small fw-bold text-secondary">Destination</label>
+          <select id="targetNodeSelect" class="form-select form-select-sm">
+            <option value="">-- Choose Destination --</option>
+            {% for n in nodes %}
+              <option value="{{ n.id }}" {% if n.node_code == 'NODE_CANTEEN' %}selected{% endif %}>
+                {{ n.name }} ({{ n.building }} - {{ n.floor }})
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div id="routeAutoStatus" class="small text-muted mb-2"><i class="fa-solid fa-wand-magic-sparkles me-1"></i>Route updates automatically once both points are chosen.</div>
+        <button id="btnClearRoute" class="btn btn-outline-secondary btn-sm rounded-pill w-100">
+          <i class="fa-solid fa-rotate-left me-1"></i> Reset Active Path
+        </button>
+      </div>
+
+      <!-- Quick Location Search & Directory -->
+      <div class="card campus-card border-0 shadow-sm p-3">
+        <h6 class="fw-bold text-dark mb-2"><i class="fa-solid fa-magnifying-glass text-secondary me-2"></i>Campus Location Search</h6>
+        <div class="input-group input-group-sm mb-3">
+          <span class="input-group-text bg-light"><i class="fa-solid fa-search text-muted"></i></span>
+          <input type="text" id="nodeSearchInput" class="form-control" placeholder="Search classrooms, labs, offices...">
+        </div>
+
+        <div id="nodeSearchResults" class="overflow-auto" style="max-height: 280px;">
+          {% for n in nodes %}
+          <div class="node-pin-card p-2 border rounded-2 mb-2 node-item" 
+               data-id="{{ n.id }}" 
+               data-name="{{ n.name }}" 
+               data-category="{{ n.category }}"
+               data-building="{{ n.building }}"
+               data-floor="{{ n.floor }}">
+            <div class="d-flex justify-content-between align-items-start">
+              <span class="fw-bold small text-dark">{{ n.name }}</span>
+              <div class="d-flex align-items-center gap-1">
+                <span class="badge bg-secondary" style="font-size: 0.65rem;">{{ n.category }}</span>
+                {% if (current_user and current_user.is_main_admin()) or (user and user.is_main_admin()) %}
+                  <a href="{{ url_for('admin.manage_navigation') }}#editNode{{ n.id }}" class="btn btn-xs btn-outline-danger p-0 px-1 rounded-1" title="Modify this location & photo in Admin Manager" onclick="event.stopPropagation();">
+                    <i class="fa-solid fa-pen fa-xs"></i>
+                  </a>
+                {% endif %}
+              </div>
+            </div>
+            <div class="text-muted" style="font-size: 0.72rem;">
+              <i class="fa-solid fa-building me-1"></i> {{ n.building }} • {{ n.floor }}
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <!-- Center/Right: Interactive Map Canvas & Street View HUD -->
+    <div class="col-lg-8 col-xl-9">
+      
+      <!-- Interactive Canvas Card -->
+      <div class="card campus-card border-0 shadow-sm p-2 mb-3">
+        <div class="d-flex justify-content-between align-items-center px-2 py-1">
+          <div class="small text-muted">
+            <i class="fa-solid fa-computer-mouse me-1"></i> Drag to pan • Scroll to zoom • Double-click node for Street View photo
+          </div>
+          <div id="routeSummaryBadge" class="d-none">
+            <span class="badge bg-success px-3 py-2 rounded-pill shadow-sm" id="routeStatsText">
+              <i class="fa-solid fa-person-walking me-1"></i> Calculating...
+            </span>
+          </div>
+        </div>
+
+        <div class="map-canvas-container">
+          <canvas id="campusMapCanvas" width="1000" height="650"></canvas>
+
+          <!-- Floor Plan Layer (shown when a plan is selected) -->
+          <div id="floorPlanLayer" class="d-none">
+            <div class="floorplan-head"><i class="fa-solid fa-layer-group me-1"></i><span id="floorPlanTitle">Floor Plan</span></div>
+            <img id="floorPlanImg" src="" alt="Campus floor plan" class="floorplan-img">
+            <div class="small text-white-50 text-center mt-1">Drag to explore • Scroll to zoom • Double-click to zoom in</div>
+          </div>
+          
+          <!-- Zoom & Canvas Controls Overlay -->
+          <div class="map-controls-overlay">
+            <button class="map-ctrl-btn" id="btnZoomIn" title="Zoom In (+)">
+              <i class="fa-solid fa-plus"></i>
+            </button>
+            <button class="map-ctrl-btn" id="btnZoomOut" title="Zoom Out (-)">
+              <i class="fa-solid fa-minus"></i>
+            </button>
+            <button class="map-ctrl-btn" id="btnResetView" title="Reset View">
+              <i class="fa-solid fa-rotate"></i>
+            </button>
+            <button class="map-ctrl-btn" id="btnFullscreen" title="Full Screen">
+              <i class="fa-solid fa-expand"></i>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Turn-by-Turn Directions Panel -->
+      <div id="directionsCard" class="card campus-card border-0 shadow-sm p-3 d-none">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h6 class="fw-bold text-dark mb-0"><i class="fa-solid fa-diamond-turn-right text-success me-2"></i>Turn-by-Turn Campus Directions</h6>
+          <span class="badge bg-primary" id="activeAlgorithmBadge">A* ROUTE</span>
+        </div>
+        <div id="directionsList">
+          <!-- Populated by JavaScript upon route calculation -->
+        </div>
+        <button id="btnStartWalkthrough" class="btn btn-dark rounded-pill w-100 mt-2 fw-bold d-none">
+          <i class="fa-solid fa-vr-cardboard me-1"></i> Start Street-View Walkthrough (Photo Guide)
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+
+<!-- Street View-style Photographic Waypoint Modal -->
+<div class="modal fade" id="streetViewModal" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content overflow-hidden border-0 shadow-lg">
+      <div class="modal-header bg-dark text-white border-0 py-2">
+        <h6 class="modal-title fw-bold" id="svModalTitle">
+          <i class="fa-solid fa-camera text-warning me-2"></i>Street View Photographic Waypoint
+        </h6>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body p-0">
+        <div class="streetview-viewport" id="svViewport">
+          <img id="svModalImg" src="/static/images/placeholder_node.jpg" alt="Waypoint POV Photo" class="streetview-img">
+          <!-- 360° interactive panorama (shown only for panoramic waypoints) -->
+          <div id="svPanoViewer" class="sv-pano d-none"></div>
+          <div id="svPanoHint" class="sv-pano-hint d-none"><i class="fa-solid fa-arrows-left-right me-1"></i>Drag to look around &bull; 360&deg; view</div>
+          
+          <div class="streetview-overlay-hud">
+            <div class="d-flex justify-content-between align-items-end">
+              <div>
+                <span class="badge bg-warning text-dark px-2 py-1 mb-1" id="svModalBadge">Laboratory</span>
+                <span class="badge bg-info text-dark px-2 py-1 mb-1 d-none" id="svModalPanoBadge"><i class="fa-solid fa-panorama me-1"></i>360°</span>
+                <h5 class="fw-bold mb-0 text-white" id="svModalName">Computer Science Department</h5>
+                <p class="small text-light mb-0" id="svModalLocation">Academic Block A • 1st Floor</p>
+              </div>
+              <span class="badge-sample-data">Sample Photography</span>
+            </div>
+          </div>
+
+          <!-- Photo Viewer Controls: zoom / reset / fullscreen -->
+          <div class="sv-control-bar">
+            <button class="map-ctrl-btn" id="svZoomIn" title="Zoom In"><i class="fa-solid fa-plus"></i></button>
+            <button class="map-ctrl-btn" id="svZoomOut" title="Zoom Out"><i class="fa-solid fa-minus"></i></button>
+            <button class="map-ctrl-btn" id="svResetZoom" title="Reset Zoom"><i class="fa-solid fa-rotate"></i></button>
+            <button class="map-ctrl-btn" id="svFullscreen" title="Full Screen"><i class="fa-solid fa-expand"></i></button>
+          </div>
+
+          <!-- Directional arrows to connected photographs (street-view movement) -->
+          <div class="sv-connections-strip" id="svConnections">
+            <span class="small text-white-50 px-2">Loading connected points…</span>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer bg-light py-2 px-3 d-flex justify-content-between align-items-center">
+        <div class="flex-grow-1">
+          <div class="small fw-bold text-primary mb-0" id="svInstruction">Navigation instruction appears here.</div>
+          <p class="small text-muted mb-0" id="svModalDesc">Photographs of buildings, corridors, staircases and rooms.</p>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+          {% if (current_user and current_user.is_main_admin()) or (user and user.is_main_admin()) %}
+            <a id="svAdminEditBtn" href="{{ url_for('admin.manage_navigation') }}" class="btn btn-sm btn-danger rounded-pill px-3 shadow-sm fw-bold" target="_blank" title="Modify this location, coordinates, or replace its photograph in Admin Console">
+              <i class="fa-solid fa-pen-to-square me-1"></i> Modify This Room &amp; Photo
+            </a>
+          {% endif %}
+          <div class="btn-group btn-group-sm" role="group" aria-label="Previous / next connected photograph">
+            <button type="button" class="btn btn-outline-primary rounded-pill" id="svPrevPhoto" title="Previous connected photograph"><i class="fa-solid fa-chevron-left"></i></button>
+            <button type="button" class="btn btn-outline-primary" id="svNextPhoto" title="Next connected photograph"><i class="fa-solid fa-chevron-right"></i></button>
+          </div>
+          <button type="button" class="btn btn-sm btn-secondary rounded-pill" data-bs-dismiss="modal">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>document.body.classList.add('nav-scene');</script>
+<script src="{{ url_for('static', filename='js/navigation.js') }}"></script>
+{% endblock %}

@@ -1,0 +1,461 @@
+{% extends "base.html" %}
+
+{% block title %}Register Account{% endblock %}
+
+{% block extra_head %}
+<style>
+  /* ===== Neon smart-city re-theme for the Register page (colors only, data unchanged) ===== */
+  body.register-scene {
+    background:
+      radial-gradient(900px 500px at 88% 6%, rgba(255, 61, 104, 0.20), transparent 60%),
+      radial-gradient(820px 620px at 8% 90%, rgba(79, 70, 229, 0.32), transparent 60%),
+      linear-gradient(160deg, #12142a 0%, #1a1d3a 45%, #0f1128 100%) fixed;
+  }
+  body.register-scene .college-header,
+  body.register-scene nav.navbar,
+  body.register-scene footer { display: none; }
+
+  body.register-scene main { color: #e7ebff; }
+  body.register-scene .text-dark { color: #ffffff !important; }
+  body.register-scene .text-muted { color: rgba(210, 216, 245, 0.72) !important; }
+  body.register-scene .text-secondary { color: rgba(214, 220, 255, 0.85) !important; }
+  body.register-scene .text-primary { color: #6fd3ff !important; }
+  body.register-scene .bg-primary { background: linear-gradient(90deg, #4facfe, #7b5cff) !important; }
+
+  /* Glass card with shining gradient border */
+  body.register-scene .campus-card {
+    position: relative;
+    background: rgba(18, 20, 42, 0.82);
+    border: 1px solid transparent;
+    border-radius: 20px;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    box-shadow: 0 24px 60px -20px rgba(0, 0, 0, 0.7), 0 0 22px rgba(123, 92, 255, 0.2);
+    overflow: visible;
+  }
+  body.register-scene .campus-card:hover { transform: none; }
+  body.register-scene .campus-card::before {
+    content: "";
+    position: absolute; inset: 0; border-radius: 20px; padding: 2px;
+    background: linear-gradient(120deg, #4facfe, #7b5cff, #ff3d68, #43e9d6, #4facfe);
+    background-size: 300% 300%;
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor; mask-composite: exclude;
+    animation: regShine 7s linear infinite;
+    pointer-events: none; /* keep all fields clickable */
+  }
+  @keyframes regShine {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+  }
+
+  /* ===== Animations: pulsing shine + hover shake-with-shine on the big card ===== */
+  body.register-scene .campus-card::before {
+    animation: regShine 7s linear infinite, regGlowPulse 3s ease-in-out infinite;
+  }
+  @keyframes regGlowPulse {
+    0%, 100% { box-shadow: 0 0 22px rgba(123, 92, 255, 0.32); }
+    50% { box-shadow: 0 0 42px rgba(79, 172, 254, 0.58); }
+  }
+  body.register-scene .campus-card:hover::before {
+    animation: regShine 1.4s linear infinite, regBorderShake 0.26s ease-in-out infinite, regGlowBurst 0.8s ease-in-out infinite;
+  }
+  @keyframes regBorderShake {
+    0%, 100% { transform: translate(0, 0); }
+    20% { transform: translate(-2px, 1px); }
+    40% { transform: translate(2px, -1px); }
+    60% { transform: translate(-1px, -2px); }
+    80% { transform: translate(1px, 2px); }
+  }
+  @keyframes regGlowBurst {
+    0%, 100% { box-shadow: 0 0 34px rgba(255, 61, 104, 0.5); }
+    50% { box-shadow: 0 0 60px rgba(67, 233, 214, 0.72); }
+  }
+
+  body.register-scene .login-title, body.register-scene h3.fw-bold { color: #ffffff; text-shadow: 0 0 18px rgba(123, 92, 255, 0.6); }
+  body.register-scene .form-label { color: rgba(214, 220, 255, 0.85); }
+
+  /* Inputs & selects */
+  body.register-scene .form-control,
+  body.register-scene .form-select {
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(140, 150, 220, 0.35);
+    color: #ffffff;
+  }
+  body.register-scene .form-control::placeholder { color: rgba(200, 205, 240, 0.5); }
+  body.register-scene .form-control:focus,
+  body.register-scene .form-select:focus {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: #7b5cff;
+    color: #ffffff;
+    box-shadow: 0 0 0 0.2rem rgba(123, 92, 255, 0.25), 0 0 16px rgba(79, 172, 254, 0.3);
+  }
+  body.register-scene .form-select option { background: #1a1d3a; color: #ffffff; }
+
+  /* Role selection tabs */
+  body.register-scene .btn-outline-primary {
+    --bs-btn-color: #9fb0ff;
+    --bs-btn-border-color: rgba(140, 150, 220, 0.5);
+    --bs-btn-hover-bg: rgba(123, 92, 255, 0.25);
+    --bs-btn-hover-border-color: #7b5cff;
+    --bs-btn-hover-color: #ffffff;
+    background: transparent;
+  }
+  body.register-scene .btn-check:checked + .btn-outline-primary {
+    background: linear-gradient(90deg, #4facfe, #7b5cff);
+    border-color: #7b5cff;
+    color: #ffffff;
+  }
+
+  /* Advisory banners */
+  body.register-scene .alert-warning {
+    background: rgba(245, 166, 35, 0.14);
+    border: 1px solid rgba(245, 166, 35, 0.4);
+    color: #ffe1a6;
+  }
+  body.register-scene .alert-info {
+    background: rgba(67, 233, 214, 0.12);
+    border: 1px solid rgba(67, 233, 214, 0.4);
+    color: #b6f5ec;
+  }
+
+  /* Password requirements panel */
+  body.register-scene .card.bg-light {
+    background: rgba(255, 255, 255, 0.05) !important;
+    border: 1px solid rgba(140, 150, 220, 0.3);
+  }
+  body.register-scene .text-success { color: #43e9d6 !important; }
+  body.register-scene .text-danger { color: #ff6b85 !important; }
+
+  /* Create Account button */
+  body.register-scene .btn-primary {
+    background: linear-gradient(90deg, #4facfe 0%, #7b5cff 55%, #a24bff 100%);
+    border: none;
+    color: #ffffff;
+    box-shadow: 0 8px 24px -6px rgba(123, 92, 255, 0.7), 0 0 18px rgba(79, 172, 254, 0.4);
+    transition: all 0.2s ease;
+  }
+  body.register-scene .btn-primary:hover {
+    color: #ffffff;
+    transform: translateY(-2px);
+    box-shadow: 0 12px 30px -6px rgba(123, 92, 255, 0.85), 0 0 26px rgba(79, 172, 254, 0.6);
+  }
+
+  body.register-scene a.text-primary { color: #6fd3ff !important; }
+  body.register-scene a.text-primary:hover { color: #a9e6ff !important; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+  <div class="row justify-content-center">
+    <div class="col-md-9 col-lg-7">
+      
+      <div class="card campus-card border-0 shadow-lg p-4 p-md-5">
+        <div class="text-center mb-4">
+          <div class="rounded-circle bg-primary bg-opacity-10 d-inline-flex p-3 text-primary mb-2">
+            <i class="fa-solid fa-user-plus fa-2x"></i>
+          </div>
+          <h3 class="fw-bold text-primary">Join Smart Campus 360</h3>
+          <p class="text-muted small">Government Engineering College, Mosalehosahalli (Hassan)</p>
+        </div>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            {% for category, message in messages %}
+              <div class="alert alert-{{ category if category != 'error' else 'danger' }} alert-dismissible fade show shadow-sm mb-4" role="alert">
+                <i class="fa-solid {% if category == 'success' %}fa-circle-check{% elif category == 'danger' %}fa-triangle-exclamation{% else %}fa-circle-info{% endif %} me-2"></i>
+                {{ message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+              </div>
+            {% endfor %}
+          {% endif %}
+        {% endwith %}
+
+        {% set sel_role = form_data.get('role', 'student') if form_data else 'student' %}
+
+        <form method="POST" action="{{ url_for('auth.register') }}" id="registerForm">
+          
+          <!-- Role Selection Tabs -->
+          <div class="mb-4">
+            <label class="form-label fw-bold small text-secondary">Select Your Institutional Role <span class="text-danger">*</span></label>
+            <div class="btn-group w-100 shadow-sm" role="group">
+              <input type="radio" class="btn-check" name="role" id="roleStudent" value="student" {% if sel_role == 'student' %}checked{% endif %}>
+              <label class="btn btn-outline-primary fw-bold" for="roleStudent">
+                <i class="fa-solid fa-user-graduate me-1"></i> Student
+              </label>
+
+              <input type="radio" class="btn-check" name="role" id="roleTeacher" value="teacher" {% if sel_role == 'teacher' %}checked{% endif %}>
+              <label class="btn btn-outline-primary fw-bold" for="roleTeacher">
+                <i class="fa-solid fa-chalkboard-user me-1"></i> Teacher (Faculty)
+              </label>
+
+              <input type="radio" class="btn-check" name="role" id="roleVisitor" value="visitor" {% if sel_role == 'visitor' %}checked{% endif %}>
+              <label class="btn btn-outline-primary fw-bold" for="roleVisitor">
+                <i class="fa-solid fa-street-view me-1"></i> Campus Visitor
+              </label>
+            </div>
+          </div>
+
+          <!-- Teacher Verification Advisory Banner (shows when Teacher selected) -->
+          <div id="teacherAdvisory" class="alert alert-warning border-0 rounded-3 mb-4 d-none">
+            <div class="d-flex align-items-center gap-2 mb-1">
+              <i class="fa-solid fa-shield-halved text-warning"></i>
+              <strong>Faculty Verification Protocol:</strong>
+            </div>
+            <div class="small">
+              Teacher accounts require administrative verification of your Employee ID by the Main Admin. 
+              Once verified, your account automatically receives <strong>Teacher-First Priority queue status</strong> on all canteen orders.
+            </div>
+          </div>
+
+          <!-- Visitor Access Guidance Banner (shows when Visitor selected) -->
+          <div id="visitorAdvisory" class="alert alert-info border-0 rounded-3 mb-4 d-none">
+            <div class="d-flex align-items-center gap-2 mb-1">
+              <i class="fa-solid fa-circle-info text-info"></i>
+              <strong>Visitor Access Guidelines:</strong>
+            </div>
+            <div class="small">
+              Visitors enjoy unrestricted access to public campus navigation, waypoints, and guest canteen booking without accessing internal student/staff directories.
+            </div>
+          </div>
+
+          <!-- Common Personal Fields -->
+          <div class="row g-3 mb-3">
+            <div class="col-md-6">
+              <label class="form-label fw-bold small text-secondary">Full Name <span class="text-danger">*</span></label>
+              <input type="text" name="full_name" class="form-control" placeholder="e.g. Ramesh Kumar / Sneha Patil" value="{{ form_data.get('full_name', '') if form_data else '' }}" required>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-bold small text-secondary">Email Address <span class="text-danger">*</span></label>
+              <input type="email" name="email" class="form-control" placeholder="name@gechassan.ac.in" value="{{ form_data.get('email', '') if form_data else '' }}" required>
+            </div>
+          </div>
+
+          <!-- Dynamic Department Field (Student & Teacher) -->
+          {% set sel_dept = form_data.get('department', 'Computer Science & Engineering') if form_data else 'Computer Science & Engineering' %}
+          <div id="deptSection" class="row g-3 mb-3">
+            <div class="col-md-6">
+              <label class="form-label fw-bold small text-secondary">Department / Branch <span class="text-danger">*</span></label>
+              <select name="department" id="departmentInput" class="form-select">
+                <option value="Computer Science & Engineering" {% if sel_dept == 'Computer Science & Engineering' %}selected{% endif %}>Computer Science & Engineering</option>
+                <option value="Electronics & Communication Engineering" {% if sel_dept == 'Electronics & Communication Engineering' %}selected{% endif %}>Electronics & Communication Engineering</option>
+                <option value="Mechanical Engineering" {% if sel_dept == 'Mechanical Engineering' %}selected{% endif %}>Mechanical Engineering</option>
+                <option value="Civil Engineering" {% if sel_dept == 'Civil Engineering' %}selected{% endif %}>Civil Engineering</option>
+                <option value="Basic Science & Humanities" {% if sel_dept == 'Basic Science & Humanities' %}selected{% endif %}>Basic Science & Humanities</option>
+                <option value="Campus Administration" {% if sel_dept == 'Campus Administration' %}selected{% endif %}>Campus Administration</option>
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-bold small text-secondary">Phone Number</label>
+              <input type="text" name="phone" class="form-control" placeholder="+91 98450 XXXXX" value="{{ form_data.get('phone', '') if form_data else '' }}">
+            </div>
+          </div>
+
+          <!-- Student-Only Fields: USN & Semester -->
+          {% set sel_sem = form_data.get('semester', '5th Semester') if form_data else '5th Semester' %}
+          <div id="studentFields" class="row g-3 mb-3">
+            <div class="col-md-6">
+              <label class="form-label fw-bold small text-secondary">University USN <span class="text-danger">*</span></label>
+              <input type="text" name="usn" id="usnInput" class="form-control text-uppercase" placeholder="e.g. 4GH22CS045" value="{{ form_data.get('usn', '') if form_data else '' }}">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-bold small text-secondary">Current Semester</label>
+              <select name="semester" class="form-select">
+                {% for sem in ['1st Semester', '2nd Semester', '3rd Semester', '4th Semester', '5th Semester', '6th Semester', '7th Semester', '8th Semester'] %}
+                  <option value="{{ sem }}" {% if sel_sem == sem %}selected{% endif %}>{{ sem }}</option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+
+          <!-- Teacher-Only Fields: Employee ID & Designation -->
+          {% set sel_desig = form_data.get('designation', 'Assistant Professor') if form_data else 'Assistant Professor' %}
+          <div id="teacherFields" class="row g-3 mb-3 d-none">
+            <div class="col-md-6">
+              <label class="form-label fw-bold small text-secondary">Official Employee ID <span class="text-danger">*</span></label>
+              <input type="text" name="employee_id" id="empIdInput" class="form-control text-uppercase" placeholder="e.g. EMP-CSE-042" value="{{ form_data.get('employee_id', '') if form_data else '' }}">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-bold small text-secondary">Academic Designation <span class="text-danger">*</span></label>
+              <select name="designation" class="form-select">
+                {% for d in ['Assistant Professor', 'Associate Professor', 'Professor', 'Professor & HOD', 'Technical Instructor'] %}
+                  <option value="{{ d }}" {% if sel_desig == d %}selected{% endif %}>{{ d }}</option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+
+          <!-- Visitor-Only Fields: Purpose of Visit -->
+          {% set sel_pov = form_data.get('purpose_of_visit', 'Parent Meeting / Faculty Interaction') if form_data else 'Parent Meeting / Faculty Interaction' %}
+          <div id="visitorFields" class="row g-3 mb-3 d-none">
+            <div class="col-12">
+              <label class="form-label fw-bold small text-secondary">Purpose of Campus Visit <span class="text-danger">*</span></label>
+              <select name="purpose_of_visit" class="form-select">
+                {% for pov in ['Parent Meeting / Faculty Interaction', 'Prospective Student Admission Enquiry', 'Academic Seminar / Conference Guest', 'Campus Facilities Tour', 'Official / Vendor Visit'] %}
+                  <option value="{{ pov }}" {% if sel_pov == pov %}selected{% endif %}>{{ pov }}</option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+
+          <!-- Password Fields -->
+          <div class="row g-3 mb-2">
+            <div class="col-md-6">
+              <label class="form-label fw-bold small text-secondary">Password <span class="text-danger">*</span></label>
+              <input type="password" id="regPassword" name="password" class="form-control" placeholder="••••••••" required autocomplete="new-password">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-bold small text-secondary">Confirm Password <span class="text-danger">*</span></label>
+              <input type="password" id="regConfirmPassword" name="confirm_password" class="form-control" placeholder="••••••••" required autocomplete="new-password">
+            </div>
+          </div>
+
+          <!-- Real-time Password Requirements Checklist -->
+          <div class="card bg-light border-0 p-3 mb-4 rounded-3">
+            <div class="small fw-bold text-secondary mb-1">Password Requirements:</div>
+            <div class="d-flex flex-wrap gap-3 small">
+              <span id="pwLenCheck" class="text-muted"><i class="fa-regular fa-circle me-1"></i> At least 8 characters</span>
+              <span id="pwAlphaNumCheck" class="text-muted"><i class="fa-regular fa-circle me-1"></i> Letters &amp; numbers</span>
+              <span id="pwMatchCheck" class="text-muted"><i class="fa-regular fa-circle me-1"></i> Passwords match</span>
+            </div>
+          </div>
+
+          <button type="submit" id="submitBtn" class="btn btn-primary btn-lg rounded-pill w-100 fw-bold mb-3 shadow">
+            Create Account <i class="fa-solid fa-arrow-right ms-1"></i>
+          </button>
+        </form>
+
+        <div class="text-center small text-muted">
+          Already registered? <a href="{{ url_for('auth.login') }}" class="text-primary fw-bold text-decoration-none">Sign in here</a>
+        </div>
+
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+document.body.classList.add('register-scene');
+function updateRoleFields() {
+  const isStudent = document.getElementById('roleStudent').checked;
+  const isTeacher = document.getElementById('roleTeacher').checked;
+  const isVisitor = document.getElementById('roleVisitor').checked;
+
+  const teacherAdvisory = document.getElementById('teacherAdvisory');
+  const visitorAdvisory = document.getElementById('visitorAdvisory');
+  const deptSection = document.getElementById('deptSection');
+  const studentFields = document.getElementById('studentFields');
+  const teacherFields = document.getElementById('teacherFields');
+  const visitorFields = document.getElementById('visitorFields');
+
+  const usnInput = document.getElementById('usnInput');
+  const empIdInput = document.getElementById('empIdInput');
+
+  if (isStudent) {
+    teacherAdvisory.classList.add('d-none');
+    visitorAdvisory.classList.add('d-none');
+    deptSection.classList.remove('d-none');
+    studentFields.classList.remove('d-none');
+    teacherFields.classList.add('d-none');
+    visitorFields.classList.add('d-none');
+
+    usnInput.required = true;
+    usnInput.disabled = false;
+    empIdInput.required = false;
+    empIdInput.disabled = true;
+  } else if (isTeacher) {
+    teacherAdvisory.classList.remove('d-none');
+    visitorAdvisory.classList.add('d-none');
+    deptSection.classList.remove('d-none');
+    studentFields.classList.add('d-none');
+    teacherFields.classList.remove('d-none');
+    visitorFields.classList.add('d-none');
+
+    usnInput.required = false;
+    usnInput.disabled = true;
+    empIdInput.required = true;
+    empIdInput.disabled = false;
+  } else if (isVisitor) {
+    teacherAdvisory.classList.add('d-none');
+    visitorAdvisory.classList.remove('d-none');
+    deptSection.classList.add('d-none');
+    studentFields.classList.add('d-none');
+    teacherFields.classList.add('d-none');
+    visitorFields.classList.remove('d-none');
+
+    usnInput.required = false;
+    usnInput.disabled = true;
+    empIdInput.required = false;
+    empIdInput.disabled = true;
+  }
+}
+
+// Attach role change listeners
+document.querySelectorAll('input[name="role"]').forEach(function(radio) {
+  radio.addEventListener('change', updateRoleFields);
+  radio.addEventListener('click', updateRoleFields);
+});
+
+// Real-time password requirement checker
+const pwInput = document.getElementById('regPassword');
+const confirmPwInput = document.getElementById('regConfirmPassword');
+const pwLenCheck = document.getElementById('pwLenCheck');
+const pwAlphaNumCheck = document.getElementById('pwAlphaNumCheck');
+const pwMatchCheck = document.getElementById('pwMatchCheck');
+
+function checkPassword() {
+  const val = pwInput.value || '';
+  const confirmVal = confirmPwInput.value || '';
+
+  // Length check (>= 8)
+  if (val.length >= 8) {
+    pwLenCheck.className = 'text-success fw-bold';
+    pwLenCheck.innerHTML = '<i class="fa-solid fa-circle-check me-1"></i> At least 8 characters';
+  } else {
+    pwLenCheck.className = val.length > 0 ? 'text-danger' : 'text-muted';
+    pwLenCheck.innerHTML = '<i class="fa-regular fa-circle me-1"></i> At least 8 characters';
+  }
+
+  // Alpha + Numeric check
+  const hasLetter = /[A-Za-z]/.test(val);
+  const hasDigit = /\d/.test(val);
+  if (hasLetter && hasDigit) {
+    pwAlphaNumCheck.className = 'text-success fw-bold';
+    pwAlphaNumCheck.innerHTML = '<i class="fa-solid fa-circle-check me-1"></i> Letters & numbers';
+  } else {
+    pwAlphaNumCheck.className = val.length > 0 ? 'text-danger' : 'text-muted';
+    pwAlphaNumCheck.innerHTML = '<i class="fa-regular fa-circle me-1"></i> Letters & numbers';
+  }
+
+  // Match check
+  if (confirmVal.length > 0) {
+    if (val === confirmVal) {
+      pwMatchCheck.className = 'text-success fw-bold';
+      pwMatchCheck.innerHTML = '<i class="fa-solid fa-circle-check me-1"></i> Passwords match';
+      confirmPwInput.setCustomValidity('');
+    } else {
+      pwMatchCheck.className = 'text-danger';
+      pwMatchCheck.innerHTML = '<i class="fa-solid fa-circle-xmark me-1"></i> Passwords do not match';
+      confirmPwInput.setCustomValidity('Passwords do not match');
+    }
+  } else {
+    pwMatchCheck.className = 'text-muted';
+    pwMatchCheck.innerHTML = '<i class="fa-regular fa-circle me-1"></i> Passwords match';
+    confirmPwInput.setCustomValidity('');
+  }
+}
+
+if (pwInput && confirmPwInput) {
+  pwInput.addEventListener('input', checkPassword);
+  confirmPwInput.addEventListener('input', checkPassword);
+}
+
+// Run immediately
+updateRoleFields();
+document.addEventListener('DOMContentLoaded', updateRoleFields);
+</script>
+{% endblock %}
