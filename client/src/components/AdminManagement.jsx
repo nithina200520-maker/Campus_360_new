@@ -36,8 +36,52 @@ function Panel({ title, icon: Icon, children }) {
   );
 }
 
+function AssignmentPermissions({ assignment, onSave }) {
+  const moduleKey = assignment.module?.key || assignment.module_slug || assignment.slug;
+  const options = moduleKey === 'lost_found' ? lostFoundPermissionOptions : basePermissionOptions;
+  const [permissions, setPermissions] = useState(assignment.permissions || []);
+
+  useEffect(() => {
+    setPermissions(assignment.permissions || []);
+  }, [assignment.permissions]);
+
+  return (
+    <div className="min-w-56 space-y-1.5">
+      <div className="grid gap-1">
+        {options.map(([permission, label]) => (
+          <label key={permission} className="flex items-center gap-1.5 text-[10px] text-slate-300">
+            <input
+              type="checkbox"
+              checked={permissions.includes(permission)}
+              onChange={() => setPermissions((current) => current.includes(permission)
+                ? current.filter((value) => value !== permission)
+                : [...current, permission])}
+              className="accent-cyan-400"
+            />
+            {label}
+          </label>
+        ))}
+      </div>
+      <button type="button" className={buttonClass} onClick={() => onSave(permissions)}>
+        Save permissions
+      </button>
+    </div>
+  );
+}
+
 const fieldClass = 'w-full rounded-lg border border-cyan-400/20 bg-[#060e20] px-3 py-2 text-xs text-white outline-none focus:border-cyan-300';
 const buttonClass = 'inline-flex items-center justify-center gap-1.5 rounded-lg border border-cyan-400/30 bg-cyan-500/10 px-3 py-2 text-xs font-bold text-cyan-200 hover:bg-cyan-500/20 disabled:cursor-not-allowed disabled:opacity-50';
+const basePermissionOptions = [
+  ['notifications:read', 'Read notifications'],
+  ['notifications:send', 'Send notifications'],
+  ['activity:read', 'View module activity'],
+];
+const lostFoundPermissionOptions = [
+  ...basePermissionOptions,
+  ['reports:view', 'View all Lost & Found details'],
+  ['reports:edit', 'Edit and verify reports'],
+  ['reports:delete', 'Delete Lost & Found reports'],
+];
 
 export default function AdminManagement() {
   const [modules, setModules] = useState([]);
@@ -96,12 +140,14 @@ export default function AdminManagement() {
 
   const filteredUsers = useMemo(() => {
     const query = userSearch.trim().toLowerCase();
+    const selectedModuleKey = modules.find((module) => String(module.id) === String(selectedModule))?.key;
     return users.filter((user) => {
       const registeredRole = ['student', 'faculty', 'teacher'].includes(user.role);
+      const eligibleForModule = selectedModuleKey !== 'lost_found' || ['faculty', 'teacher'].includes(user.role);
       const searchable = `${user.name || user.full_name || ''} ${user.email || ''} ${user.identifier || user.usn_or_id || ''}`.toLowerCase();
-      return registeredRole && user.is_active && user.is_verified && (!query || searchable.includes(query));
+      return registeredRole && eligibleForModule && user.is_active && user.is_verified && (!query || searchable.includes(query));
     });
-  }, [users, userSearch]);
+  }, [users, userSearch, modules, selectedModule]);
 
   const submit = async (action, successMessage) => {
     setError('');
@@ -207,6 +253,10 @@ export default function AdminManagement() {
       : [...current, permission]);
   };
 
+  const permissionOptions = modules.find((module) => String(module.id) === String(selectedModule))?.key === 'lost_found'
+    ? lostFoundPermissionOptions
+    : basePermissionOptions;
+
   return (
     <div className="space-y-5">
       <div>
@@ -240,8 +290,8 @@ export default function AdminManagement() {
 
       <div className="grid gap-5 xl:grid-cols-2">
         <Panel title="Create Module Administrator" icon={Users}>
-          <p className="text-[11px] leading-relaxed text-slate-400">
-            Only existing registered student or faculty accounts are eligible. Their base account role and credentials remain unchanged.
+            <p className="text-[11px] leading-relaxed text-slate-400">
+            Only existing registered student or faculty accounts are eligible. Their base account role and credentials remain unchanged. Lost &amp; Found permissions control viewing, editing, and deleting reports.
           </p>
           <div className="relative">
             <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-500" />
@@ -262,18 +312,31 @@ export default function AdminManagement() {
                 </option>
               ))}
             </select>
-            <select className={fieldClass} value={selectedModule} onChange={(event) => setSelectedModule(event.target.value)} required>
+            <select
+              className={fieldClass}
+              value={selectedModule}
+              onChange={(event) => {
+                const nextModule = event.target.value;
+                setSelectedModule(nextModule);
+                const selectedModuleRecord = modules.find((module) => String(module.id) === String(nextModule));
+                const isLostFound = selectedModuleRecord?.key === 'lost_found';
+                const selectedAccount = users.find((user) => String(user.id) === String(selectedUser));
+                if (isLostFound && selectedAccount && !['faculty', 'teacher'].includes(selectedAccount.role)) {
+                  setSelectedUser('');
+                }
+                setSelectedPermissions(isLostFound
+                  ? lostFoundPermissionOptions.map(([permission]) => permission)
+                  : basePermissionOptions.map(([permission]) => permission));
+              }}
+              required
+            >
               <option value="">Select administrative module</option>
               {modules.filter((module) => module.is_active !== false).map((module) => (
                 <option key={module.id} value={module.id}>{module.name}</option>
               ))}
             </select>
             <div className="flex flex-wrap gap-3">
-              {[
-                ['notifications:read', 'Read notifications'],
-                ['notifications:send', 'Send notifications'],
-                ['activity:read', 'View module activity'],
-              ].map(([permission, label]) => (
+              {permissionOptions.map(([permission, label]) => (
                 <label key={permission} className="flex items-center gap-2 text-xs text-slate-300">
                   <input
                     type="checkbox"
@@ -345,12 +408,24 @@ export default function AdminManagement() {
                         'Administrator module assignment changed.',
                       )}
                     >
-                      {modules.filter((module) => module.is_active !== false).map((module) => (
+                      {modules.filter((module) => (
+                        module.is_active !== false
+                        && (module.key !== 'lost_found' || ['faculty', 'teacher'].includes(assignment.user?.role))
+                      )).map((module) => (
                         <option key={module.id} value={module.id}>{module.name}</option>
                       ))}
                     </select>
                   </td>
-                  <td className="p-2 text-slate-300">{(assignment.permissions || []).join(', ')}</td>
+                  <td className="p-2 text-slate-300">
+                    <AssignmentPermissions
+                      assignment={assignment}
+                      onSave={(permissions) => updateAssignment(
+                        assignment,
+                        { permissions },
+                        'Administrator permissions updated.',
+                      )}
+                    />
+                  </td>
                   <td className="p-2 text-slate-300">{assignment.status}</td>
                   <td className="p-2">
                     <div className="flex flex-wrap gap-1.5">
@@ -364,7 +439,11 @@ export default function AdminManagement() {
                           'Administrator assignment transferred.',
                         )}
                       >
-                        {users.filter((user) => user.id !== assignment.user_id && user.is_active && user.is_verified && ['student', 'faculty', 'teacher'].includes(user.role)).map((user) => (
+                        {users.filter((user) => (
+                          user.id !== assignment.user_id && user.is_active && user.is_verified
+                          && ['student', 'faculty', 'teacher'].includes(user.role)
+                          && (assignment.module?.key !== 'lost_found' || ['faculty', 'teacher'].includes(user.role))
+                        )).map((user) => (
                           <option key={user.id} value={user.id}>{user.name || user.full_name}</option>
                         ))}
                       </select>

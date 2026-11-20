@@ -130,6 +130,20 @@ class User(db.Model):
         # Compatibility for unmigrated deployments and legacy direct updates.
         return self.admin_scope == module_key
 
+    def has_module_permission(self, module_key: str, permission: str) -> bool:
+        """Check a live module grant without trusting stale JWT role data."""
+        if self.role == 'main_admin':
+            return True
+        assignment = AdminAssignment.query.join(AdminModule).filter(
+            AdminAssignment.user_id == self.id,
+            AdminModule.key == module_key,
+        ).first()
+        if assignment and self.is_active and assignment.status == 'active' and assignment.module.is_active:
+            return permission in assignment.permissions
+        # Keep direct legacy admin_scope assignments fully functional until they
+        # are migrated to a persistent AdminAssignment row.
+        return self.admin_scope == module_key and self.is_active
+
     def is_canteen_admin(self) -> bool:
         return self.role in ('main_admin', 'canteen_admin') or self.has_module_admin('canteen')
 

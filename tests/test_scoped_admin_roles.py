@@ -30,7 +30,11 @@ def test_module_admins_are_limited_to_their_module(
         assert denied.status_code == 302
         assert denied.headers['Location'].endswith('/')
 
-    assert AuditLog.query.filter_by(action='ACCESS_DENIED_ROLE', user_id=user.id).count() == 2
+    denied_audits = AuditLog.query.filter(
+        AuditLog.user_id == user.id,
+        AuditLog.action.in_(('ACCESS_DENIED_ROLE', 'ACCESS_DENIED_PERMISSION')),
+    ).count()
+    assert denied_audits == 2
 
 
 def test_main_admin_can_open_all_module_dashboards(client, users):

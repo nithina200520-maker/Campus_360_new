@@ -83,8 +83,8 @@ export default function AdminDashboard({ currentUser, onNavigate, onLogout, onBa
   const [adminOverviewError, setAdminOverviewError] = useState('');
   const [adminUserError, setAdminUserError] = useState('');
   const [adminUserSuccess, setAdminUserSuccess] = useState('');
-  const [pendingStudentDeletion, setPendingStudentDeletion] = useState(null);
-  const [deletingStudentId, setDeletingStudentId] = useState(null);
+  const [pendingAccountDeletion, setPendingAccountDeletion] = useState(null);
+  const [deletingAccountId, setDeletingAccountId] = useState(null);
   const [activatingUserId, setActivatingUserId] = useState(null);
 
   // Announcement Form State
@@ -235,33 +235,33 @@ export default function AdminDashboard({ currentUser, onNavigate, onLogout, onBa
     }
   };
 
-  const handleDeleteStudent = async () => {
-    if (!pendingStudentDeletion || deletingStudentId !== null) return;
-    const student = pendingStudentDeletion;
+  const handleDeleteAccount = async () => {
+    if (!pendingAccountDeletion || deletingAccountId !== null) return;
+    const account = pendingAccountDeletion;
     setAdminUserError('');
     setAdminUserSuccess('');
-    setDeletingStudentId(student.id);
+    setDeletingAccountId(account.id);
     const token = localStorage.getItem('campus360_token');
     try {
-      const response = await fetch(`/api/campus-admin/users/${student.id}`, {
+      const response = await fetch(`/api/campus-admin/users/${account.id}`, {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify({ identifier: student.identifier }),
+        body: JSON.stringify({ identifier: account.identifier }),
       });
       const data = await response.json();
       if (!response.ok || !data.success) {
         throw new Error(data.message || `Student deletion failed (${response.status}).`);
       }
-      setUsersList((previous) => previous.filter((user) => user.id !== student.id));
-      setPendingStudentDeletion(null);
-      setAdminUserSuccess(`${student.name}'s account was permanently deleted.`);
+      setUsersList((previous) => previous.filter((user) => user.id !== account.id));
+      setPendingAccountDeletion(null);
+      setAdminUserSuccess(`${account.name}'s account was permanently deleted. They can register again with the same email.`);
     } catch (requestError) {
-      setAdminUserError(requestError.message || 'Could not delete this student account.');
+      setAdminUserError(requestError.message || 'Could not delete this account.');
     } finally {
-      setDeletingStudentId(null);
+      setDeletingAccountId(null);
     }
   };
 
@@ -688,15 +688,15 @@ export default function AdminDashboard({ currentUser, onNavigate, onLogout, onBa
                                   Activate
                                 </button>
                               )}
-                              {activeTab === 'students' && (
+                              {(activeTab === 'students' || activeTab === 'faculty') && (
                                 <button
                                   type="button"
                                   aria-label={`Delete ${u.name}'s account`}
-                                  title="Delete student account"
-                                  disabled={deletingStudentId === u.id}
+                                  title="Permanently delete account"
+                                  disabled={deletingAccountId === u.id}
                                   onClick={() => {
                                     setAdminUserError('');
-                                    setPendingStudentDeletion(u);
+                                    setPendingAccountDeletion(u);
                                   }}
                                   className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-red-300 bg-red-500/15 border border-red-500/40 hover:bg-red-500/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
@@ -713,32 +713,32 @@ export default function AdminDashboard({ currentUser, onNavigate, onLogout, onBa
             </div>
           )}
 
-          {pendingStudentDeletion && (
+          {pendingAccountDeletion && (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4">
               <section
                 role="dialog"
                 aria-modal="true"
-                aria-labelledby="student-delete-title"
+                aria-labelledby="account-delete-title"
                 className="w-full max-w-md rounded-2xl border border-red-400/40 bg-[#09152b] p-6 shadow-2xl"
               >
-                <h2 id="student-delete-title" className="text-lg font-bold text-white">
-                  Permanently Delete Student Account?
+                  <h2 id="account-delete-title" className="text-lg font-bold text-white">
+                  Permanently Delete {pendingAccountDeletion.role === 'student' ? 'Student' : 'Faculty'} Account?
                 </h2>
                 <p className="mt-2 text-sm text-slate-300">
-                  Are you sure you want to permanently delete this student's account? This action cannot be undone.
+                  Are you sure you want to permanently delete this account? This action cannot be undone. The same email and institutional identifier can then be registered again.
                 </p>
                 <dl className="mt-5 space-y-3 rounded-xl border border-blue-500/20 bg-[#060e20] p-4 text-sm">
                   <div className="flex justify-between gap-4">
-                    <dt className="text-slate-400">Student Name</dt>
-                    <dd className="text-right font-semibold text-white">{pendingStudentDeletion.name}</dd>
+                    <dt className="text-slate-400">Name</dt>
+                    <dd className="text-right font-semibold text-white">{pendingAccountDeletion.name}</dd>
                   </div>
                   <div className="flex justify-between gap-4">
-                    <dt className="text-slate-400">Student USN</dt>
-                    <dd className="text-right font-mono text-cyan-300">{pendingStudentDeletion.identifier}</dd>
+                    <dt className="text-slate-400">Institutional ID</dt>
+                    <dd className="text-right font-mono text-cyan-300">{pendingAccountDeletion.identifier}</dd>
                   </div>
                   <div className="flex justify-between gap-4">
                     <dt className="text-slate-400">Registered Email</dt>
-                    <dd className="break-all text-right font-mono text-slate-300">{pendingStudentDeletion.email}</dd>
+                    <dd className="break-all text-right font-mono text-slate-300">{pendingAccountDeletion.email}</dd>
                   </div>
                 </dl>
                 {adminUserError && (
@@ -749,16 +749,16 @@ export default function AdminDashboard({ currentUser, onNavigate, onLogout, onBa
                 <div className="mt-6 flex justify-end gap-3">
                   <button
                     type="button"
-                    disabled={deletingStudentId !== null}
-                    onClick={() => setPendingStudentDeletion(null)}
+                    disabled={deletingAccountId !== null}
+                    onClick={() => setPendingAccountDeletion(null)}
                     className="rounded-lg border border-slate-500/40 px-4 py-2 text-sm font-semibold text-slate-200 hover:bg-white/5 disabled:opacity-50"
                   >
                     Cancel
                   </button>
                   <button
                     type="button"
-                    disabled={deletingStudentId !== null}
-                    onClick={handleDeleteStudent}
+                    disabled={deletingAccountId !== null}
+                    onClick={handleDeleteAccount}
                     className="inline-flex items-center gap-2 rounded-lg border border-red-400/50 bg-red-600 px-4 py-2 text-sm font-bold text-white hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <Trash2 className="h-4 w-4" aria-hidden="true" />
@@ -959,7 +959,7 @@ export default function AdminDashboard({ currentUser, onNavigate, onLogout, onBa
                   <p className="text-xs text-slate-400">Authorize or reject student item release claims</p>
                 </div>
                 <button
-                  onClick={() => onNavigate('lost-found')}
+                  onClick={() => { window.location.href = '/admin/lost-found'; }}
                   className="px-3 py-1.5 rounded-xl bg-amber-500/20 border border-amber-400/50 text-amber-300 text-xs font-bold"
                 >
                   Open Registry

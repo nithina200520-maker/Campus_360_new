@@ -11,9 +11,9 @@ from app.models import (
     Notification, CanteenCategory, CanteenItem, CanteenOrder, CanteenOrderItem,
     Payment, Refund, AuditLog, ExamSchedule, AdminAssignment, AdminModule,
 )
-from app.admin_registry import DEFAULT_MODULE_PERMISSIONS, seed_default_modules
+from app.admin_registry import default_permissions_for_module, seed_default_modules
 from app.database import db
-from app.utils.auth_helpers import role_required, get_current_user
+from app.utils.auth_helpers import role_required, module_permission_required, get_current_user
 from app.utils.image_matcher import validate_image_bytes
 
 ALLOWED_PHOTO_EXT = {'png', 'jpg', 'jpeg', 'webp', 'gif'}
@@ -321,12 +321,11 @@ def change_user_admin_scope(user_id):
         flash("Invalid module admin role.", "danger")
         return redirect(request.referrer or url_for('admin.users_list'))
 
-    if scope and target_user.role not in ('student', 'teacher'):
+    if scope and target_user.role not in ('student', 'teacher', 'faculty'):
         flash("Module admin access can only be assigned to a student or faculty account.", "warning")
         return redirect(request.referrer or url_for('admin.users_list'))
-
-    if scope == 'lost_found' and target_user.role != 'teacher':
-        flash("Lost & Found Admin access can only be assigned to faculty accounts.", "warning")
+    if scope == 'lost_found' and target_user.role not in ('teacher', 'faculty'):
+        flash("Lost & Found administration can only be assigned to faculty accounts.", "warning")
         return redirect(request.referrer or url_for('admin.users_list'))
 
     previous_scope = target_user.admin_scope
@@ -355,7 +354,7 @@ def change_user_admin_scope(user_id):
                 user_id=target_user.id, module_id=module.id,
                 status='active', assigned_by_id=admin_user.id,
             )
-            assignment.permissions = list(DEFAULT_MODULE_PERMISSIONS)
+            assignment.permissions = default_permissions_for_module(scope)
             db.session.add(assignment)
     db.session.commit()
 
@@ -854,7 +853,7 @@ def import_navigation_data(kind=None):
 # ---------------------------------------------------------------------------
 
 @admin_bp.route('/lost-found')
-@role_required(['main_admin', 'lost_found_admin'])
+@module_permission_required('lost_found', 'reports:view')
 def manage_lost_found():
     """Main Admin Lost & Found command center: reports, claims queue, notification history."""
     user = get_current_user()
@@ -880,7 +879,7 @@ def manage_lost_found():
                            reporters=reporters, stats=stats, current_status=status_f)
 
 @admin_bp.route('/lost-found/item/create', methods=['POST'])
-@role_required(['main_admin', 'lost_found_admin'])
+@module_permission_required('lost_found', 'reports:edit')
 def lf_create_item():
     """Create a Lost & Found report for an active, registered campus member."""
     admin = get_current_user()
@@ -934,7 +933,7 @@ def lf_create_item():
     return redirect(url_for('admin.manage_lost_found'))
 
 @admin_bp.route('/lost-found/item/<int:item_id>/edit', methods=['POST'])
-@role_required(['main_admin', 'lost_found_admin'])
+@module_permission_required('lost_found', 'reports:edit')
 def lf_edit_item(item_id):
     """Update descriptive Lost & Found record information."""
     admin = get_current_user()
@@ -969,7 +968,7 @@ def lf_edit_item(item_id):
     return redirect(url_for('admin.manage_lost_found'))
 
 @admin_bp.route('/lost-found/item/<int:item_id>/update-location', methods=['POST'])
-@role_required(['main_admin', 'lost_found_admin'])
+@module_permission_required('lost_found', 'reports:edit')
 def lf_update_location(item_id):
     user = get_current_user()
     item = LostFoundItem.query.get_or_404(item_id)
@@ -989,7 +988,7 @@ def lf_update_location(item_id):
     return redirect(url_for('admin.manage_lost_found'))
 
 @admin_bp.route('/lost-found/item/<int:item_id>/verify', methods=['POST'])
-@role_required(['main_admin', 'lost_found_admin'])
+@module_permission_required('lost_found', 'reports:edit')
 def lf_verify_item(item_id):
     """Authorized verification that a found item is genuine and in campus custody."""
     user = get_current_user()
@@ -1007,7 +1006,7 @@ def lf_verify_item(item_id):
     return redirect(url_for('admin.manage_lost_found'))
 
 @admin_bp.route('/lost-found/claim/<int:claim_id>/decision', methods=['POST'])
-@role_required(['main_admin', 'lost_found_admin'])
+@module_permission_required('lost_found', 'reports:edit')
 def lf_claim_decision(claim_id):
     """Approve or reject an ownership claim (dispute resolution). Similarity score is never proof."""
     user = get_current_user()
@@ -1052,7 +1051,7 @@ def lf_claim_decision(claim_id):
     return redirect(url_for('admin.manage_lost_found'))
 
 @admin_bp.route('/lost-found/item/<int:item_id>/record-return', methods=['POST'])
-@role_required(['main_admin', 'lost_found_admin'])
+@module_permission_required('lost_found', 'reports:edit')
 def lf_record_return(item_id):
     """Track the physical handover: mark item collected and returned to its owner."""
     user = get_current_user()
@@ -1084,7 +1083,7 @@ def lf_record_return(item_id):
     return redirect(url_for('admin.manage_lost_found'))
 
 @admin_bp.route('/lost-found/notify/<int:user_id>', methods=['POST'])
-@role_required(['main_admin', 'lost_found_admin'])
+@module_permission_required('lost_found', 'notifications:send')
 def lf_send_notification(user_id):
     """Send a single targeted in-app notification (never a broadcast)."""
     admin = get_current_user()

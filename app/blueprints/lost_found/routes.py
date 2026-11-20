@@ -187,7 +187,7 @@ def item_detail(item_id):
     item = LostFoundItem.query.get_or_404(item_id)
 
     is_owner = bool(user and user.id == item.user_id)
-    is_admin = bool(user and user.is_lost_found_admin())
+    is_admin = bool(user and user.has_module_permission('lost_found', 'reports:view'))
     is_member = bool(user and user.role != 'visitor' and user.is_active)
 
     # Contact is shown publicly to registered members by default so owners and
@@ -348,7 +348,7 @@ def delete_item_photo(item_id):
     user = get_current_user()
     item = LostFoundItem.query.get_or_404(item_id)
 
-    if not (user.id == item.user_id or user.is_lost_found_admin()):
+    if not (user.id == item.user_id or user.has_module_permission('lost_found', 'reports:edit')):
         flash("You can only manage photos of reports you filed.", "danger")
         return redirect(url_for('lost_found.item_detail', item_id=item.id))
 
@@ -383,7 +383,7 @@ def delete_item(item_id):
     user = get_current_user()
     item = LostFoundItem.query.get_or_404(item_id)
 
-    is_admin = user.is_lost_found_admin()
+    is_admin = user.has_module_permission('lost_found', 'reports:delete')
     if not (user.id == item.user_id or is_admin):
         flash("You can only delete reports that you filed.", "danger")
         return redirect(url_for('lost_found.item_detail', item_id=item.id))

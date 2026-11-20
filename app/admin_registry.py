@@ -14,6 +14,15 @@ DEFAULT_MODULE_PERMISSIONS = (
     'notifications:read', 'notifications:send', 'activity:read',
 )
 
+LOST_FOUND_PERMISSIONS = DEFAULT_MODULE_PERMISSIONS + (
+    'reports:view', 'reports:edit', 'reports:delete',
+)
+
+
+def default_permissions_for_module(module_key):
+    """Return the permissions granted by the legacy scope-assignment flow."""
+    return list(LOST_FOUND_PERMISSIONS if module_key == 'lost_found' else DEFAULT_MODULE_PERMISSIONS)
+
 
 def seed_default_modules():
     """Insert missing defaults without overwriting administrator configuration."""

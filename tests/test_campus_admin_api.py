@@ -181,9 +181,9 @@ def test_expired_main_admin_handoff_cannot_be_claimed(client, db, users):
 def test_assignment_lifecycle_and_live_grants(client, users):
     token = main_login(client)
     modules = client.get('/api/campus-admin/modules', headers=bearer(token)).get_json()['modules']
-    lost_found = next(module for module in modules if module['key'] == 'lost_found')
+    navigation = next(module for module in modules if module['key'] == 'navigation')
     created = client.post('/api/campus-admin/assignments', headers=bearer(token), json={
-        'user_id': users['student'].id, 'module_id': lost_found['id'],
+        'user_id': users['student'].id, 'module_id': navigation['id'],
     })
     assert created.status_code == 201
     assignment_id = created.get_json()['assignment']['id']
@@ -195,7 +195,7 @@ def test_assignment_lifecycle_and_live_grants(client, users):
     assert student_token_response.status_code == 200
     student_token = student_token_response.get_json()['token']
     user_payload = student_token_response.get_json()['user']
-    assert [grant['key'] for grant in user_payload['admin_modules']] == ['lost_found']
+    assert [grant['key'] for grant in user_payload['admin_modules']] == ['navigation']
     assert 'session=' in student_token_response.headers['Set-Cookie']
 
     suspended = client.patch(
@@ -228,7 +228,7 @@ def test_assignment_lifecycle_and_live_grants(client, users):
     assert AdminAssignment.query.get(assignment_id).user_id == users['teacher_verified'].id
 
 
-def test_assignments_require_verified_registered_student_or_faculty(client, users):
+def test_assignments_require_verified_users_and_lost_found_is_faculty_only(client, users):
     token = main_login(client)
     module = AdminModule.query.filter_by(key='lost_found').one()
 
@@ -238,9 +238,13 @@ def test_assignments_require_verified_registered_student_or_faculty(client, user
     visitor = client.post('/api/campus-admin/assignments', headers=bearer(token), json={
         'user_id': users['visitor'].id, 'module_id': module.id,
     })
+    student = client.post('/api/campus-admin/assignments', headers=bearer(token), json={
+        'user_id': users['student'].id, 'module_id': module.id,
+    })
 
     assert pending.status_code == 400
     assert visitor.status_code == 400
+    assert student.status_code == 400
     assert AdminAssignment.query.count() == 0
 
 
@@ -375,30 +379,31 @@ def test_configured_modules_and_main_admin_only_management(client, users):
 def test_module_boundary_notification_attribution_and_stale_assignment(client, users):
     main_token = main_login(client)
     module = AdminModule.query.filter_by(key='lost_found').one()
+    faculty = users['teacher_verified']
     assignment_response = client.post('/api/campus-admin/assignments', headers=bearer(main_token), json={
-        'user_id': users['student'].id, 'module_id': module.id,
+        'user_id': faculty.id, 'module_id': module.id,
     })
     assignment_id = assignment_response.get_json()['assignment']['id']
-    student_login = client.post('/api/students/login', json={
-        'identifier': users['student'].usn_or_emp_id, 'password': TEST_PASSWORD,
+    faculty_login = client.post('/api/faculty/login', json={
+        'identifier': faculty.usn_or_emp_id, 'password': TEST_PASSWORD,
     }).get_json()
-    student_token = student_login['token']
-    headers = bearer(student_token)
+    faculty_token = faculty_login['token']
+    headers = bearer(faculty_token)
 
     sent = client.post('/api/campus-admin/notifications', headers=headers, json={
         'title': 'Found item update',
         'description': 'A matching report is available.',
         'module_slug': 'lost_found',
         'audience': 'selected',
-        'recipient_ids': [users['teacher_verified'].id],
+        'recipient_ids': [users['student'].id],
     })
     assert sent.status_code == 201
     note = sent.get_json()['notifications'][0]
-    assert note['created_by_id'] == users['student'].id
+    assert note['created_by_id'] == faculty.id
     assert note['originating_module'] == 'lost_found'
     assert note['audience'] == 'selected'
     assert note['is_read'] is False
-    assert note['recipient']['id'] == users['teacher_verified'].id
+    assert note['recipient']['id'] == users['student'].id
     assert client.post('/api/campus-admin/notifications', headers=headers, json={
         'title': 'Cross module', 'description': 'Denied',
         'module_slug': 'canteen', 'audience': 'all',

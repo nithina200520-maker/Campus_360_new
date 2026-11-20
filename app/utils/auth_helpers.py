@@ -80,7 +80,10 @@ def role_required(allowed_roles):
 
             has_role = user.role in allowed_roles
             has_scoped_role = any(
-                user.has_module_admin(ADMIN_ROLE_SCOPES[role])
+                user.has_module_permission(
+                    ADMIN_ROLE_SCOPES[role],
+                    'reports:view' if role == 'lost_found_admin' else 'activity:read',
+                )
                 for role in allowed_roles
                 if role in ADMIN_ROLE_SCOPES
             )
@@ -97,6 +100,30 @@ def role_required(allowed_roles):
                 return redirect(url_for('main.index'))
 
             return f(*args, **kwargs)
+        return decorated_function
+    return decorator
+
+
+def module_permission_required(module_key, permission):
+    """Protect a module action with its live assignment permission."""
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            user = get_current_user()
+            if not user:
+                flash("Please sign in to continue.", "warning")
+                return redirect(url_for('auth.login', next=request.path))
+            if user.has_module_permission(module_key, permission):
+                return f(*args, **kwargs)
+            AuditLog.log(
+                action='ACCESS_DENIED_PERMISSION',
+                module=module_key.upper(),
+                user_id=user.id,
+                details=f"User '{user.email}' lacks permission '{permission}'.",
+                ip_address=request.remote_addr,
+            )
+            flash("Access denied: your account does not have permission for this action.", "danger")
+            return redirect(url_for('main.index'))
         return decorated_function
     return decorator
 

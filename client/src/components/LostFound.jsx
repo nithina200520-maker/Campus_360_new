@@ -15,6 +15,13 @@ import {
 } from 'lucide-react';
 
 export default function LostFound({ currentUser, onBack }) {
+  // The database-backed Flask registry is the source of truth for reports,
+  // images, claims, notifications, and admin actions. Keep the old React
+  // preview out of the user workflow so students and faculty see real data.
+  useEffect(() => {
+    window.location.assign('/lost-found/');
+  }, []);
+
   const [items, setItems] = useState([
     {
       id: 1,
@@ -66,6 +73,14 @@ export default function LostFound({ currentUser, onBack }) {
   const [newLocation, setNewLocation] = useState('Campus Library');
   const [newDescription, setNewDescription] = useState('');
   const [newImageUrl, setNewImageUrl] = useState('');
+
+  if (typeof window !== 'undefined') {
+    return (
+      <div className="mx-auto max-w-2xl px-4 py-16 text-center text-sm text-slate-300">
+        Opening the live Lost &amp; Found registry…
+      </div>
+    );
+  }
 
   const filteredItems = items.filter(i => 
     i.title.toLowerCase().includes(searchQuery.toLowerCase()) ||

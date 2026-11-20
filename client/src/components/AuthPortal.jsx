@@ -43,7 +43,7 @@ export default function AuthPortal({
 
   // Form Fields State - initialized blank for a clean authentication experience (no demo prefill)
   const [fullName, setFullName] = useState('');
-  const [identifier, setIdentifier] = useState(''); // USN / Student Name for student, Faculty ID for faculty, Email for admin
+  const [identifier, setIdentifier] = useState(''); // Email for student/admin, Faculty ID or email for faculty
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [department, setDepartment] = useState('Computer Science & Engineering');
@@ -77,13 +77,11 @@ export default function AuthPortal({
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
 
-  // Load remembered identifier on mount if Remember Me was selected
-  useEffect(() => {
-    const saved = localStorage.getItem('campus360_saved_id');
-    if (saved && activeTab === 'login') {
-      setIdentifier(saved);
-    }
-  }, [activeTab]);
+  // Prevent browsers and password managers from silently filling credentials.
+  // The field becomes editable only after the user focuses it.
+  const unlockPasswordField = (event) => {
+    event.currentTarget.removeAttribute('readonly');
+  };
 
   useEffect(() => {
     let active = true;
@@ -268,7 +266,7 @@ export default function AuthPortal({
 
     if (!identifier || !password) {
       const missingMessage = selectedRole === 'student'
-        ? 'Please provide your registered student name and password.'
+        ? 'Please provide your registered email and password.'
         : 'Please provide your registered ID or email and password.';
       setErrorMessage(missingMessage);
       return;
@@ -276,11 +274,11 @@ export default function AuthPortal({
 
     if (rememberMe) {
       localStorage.setItem('campus360_remember', 'true');
-      localStorage.setItem('campus360_saved_id', identifier);
     } else {
       localStorage.removeItem('campus360_remember');
-      localStorage.removeItem('campus360_saved_id');
     }
+    // Never persist or restore login identifiers automatically.
+    localStorage.removeItem('campus360_saved_id');
 
     setLoading(true);
 
@@ -850,6 +848,8 @@ export default function AuthPortal({
                     type={showPassword ? 'text' : 'password'}
                     required
                     autoComplete="new-password"
+                    readOnly
+                    onFocus={unlockPasswordField}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="At least 8 characters"
@@ -872,6 +872,8 @@ export default function AuthPortal({
                     type={showConfirmPassword ? 'text' : 'password'}
                     required
                     autoComplete="new-password"
+                    readOnly
+                    onFocus={unlockPasswordField}
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
                     placeholder="Re-enter password"
@@ -930,6 +932,8 @@ export default function AuthPortal({
               type="password"
               required
               autoComplete="off"
+              readOnly
+              onFocus={unlockPasswordField}
               value={setupToken}
               onChange={(event) => setSetupToken(event.target.value)}
               placeholder="One-time setup token"
@@ -958,30 +962,44 @@ export default function AuthPortal({
               aria-label="Main Admin email"
               className="w-full rounded-xl border border-cyan-500/30 bg-[#060e20] px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:border-cyan-300 focus:outline-none"
             />
-            <input
-              type="password"
-              required
-              minLength={12}
-              maxLength={72}
-              autoComplete="new-password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              placeholder="Password (at least 12 characters)"
-              aria-label="Main Admin password"
-              className="w-full rounded-xl border border-cyan-500/30 bg-[#060e20] px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:border-cyan-300 focus:outline-none"
-            />
-            <input
-              type="password"
-              required
-              minLength={12}
-              maxLength={72}
-              autoComplete="new-password"
-              value={confirmPassword}
-              onChange={(event) => setConfirmPassword(event.target.value)}
-              placeholder="Confirm password"
-              aria-label="Confirm Main Admin password"
-              className="w-full rounded-xl border border-cyan-500/30 bg-[#060e20] px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:border-cyan-300 focus:outline-none"
-            />
+            <div className="relative">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                required
+                minLength={12}
+                maxLength={72}
+                autoComplete="new-password"
+                readOnly
+                onFocus={unlockPasswordField}
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                placeholder="Password (at least 12 characters)"
+                aria-label="Main Admin password"
+                className="w-full rounded-xl border border-cyan-500/30 bg-[#060e20] px-3.5 py-2.5 pr-10 text-xs text-white placeholder-slate-500 focus:border-cyan-300 focus:outline-none"
+              />
+              <button type="button" onClick={() => setShowPassword(!showPassword)} aria-label={showPassword ? 'Hide password' : 'Show password'} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white">
+                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
+            <div className="relative">
+              <input
+                type={showConfirmPassword ? 'text' : 'password'}
+                required
+                minLength={12}
+                maxLength={72}
+                autoComplete="new-password"
+                readOnly
+                onFocus={unlockPasswordField}
+                value={confirmPassword}
+                onChange={(event) => setConfirmPassword(event.target.value)}
+                placeholder="Confirm password"
+                aria-label="Confirm Main Admin password"
+                className="w-full rounded-xl border border-cyan-500/30 bg-[#060e20] px-3.5 py-2.5 pr-10 text-xs text-white placeholder-slate-500 focus:border-cyan-300 focus:outline-none"
+              />
+              <button type="button" onClick={() => setShowConfirmPassword(!showConfirmPassword)} aria-label={showConfirmPassword ? 'Hide confirmation password' : 'Show confirmation password'} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white">
+                {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
             <button
               type="submit"
               disabled={loading}
@@ -1040,30 +1058,44 @@ export default function AuthPortal({
               aria-label="New Main Admin email"
               className="w-full rounded-xl border border-cyan-500/30 bg-[#060e20] px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:border-cyan-300 focus:outline-none"
             />
-            <input
-              type="password"
-              required
-              minLength={12}
-              maxLength={72}
-              autoComplete="new-password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              placeholder="Password (at least 12 characters)"
-              aria-label="New Main Admin password"
-              className="w-full rounded-xl border border-cyan-500/30 bg-[#060e20] px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:border-cyan-300 focus:outline-none"
-            />
-            <input
-              type="password"
-              required
-              minLength={12}
-              maxLength={72}
-              autoComplete="new-password"
-              value={confirmPassword}
-              onChange={(event) => setConfirmPassword(event.target.value)}
-              placeholder="Confirm password"
-              aria-label="Confirm new Main Admin password"
-              className="w-full rounded-xl border border-cyan-500/30 bg-[#060e20] px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:border-cyan-300 focus:outline-none"
-            />
+            <div className="relative">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                required
+                minLength={12}
+                maxLength={72}
+                autoComplete="new-password"
+                readOnly
+                onFocus={unlockPasswordField}
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                placeholder="Password (at least 12 characters)"
+                aria-label="New Main Admin password"
+                className="w-full rounded-xl border border-cyan-500/30 bg-[#060e20] px-3.5 py-2.5 pr-10 text-xs text-white placeholder-slate-500 focus:border-cyan-300 focus:outline-none"
+              />
+              <button type="button" onClick={() => setShowPassword(!showPassword)} aria-label={showPassword ? 'Hide password' : 'Show password'} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white">
+                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
+            <div className="relative">
+              <input
+                type={showConfirmPassword ? 'text' : 'password'}
+                required
+                minLength={12}
+                maxLength={72}
+                autoComplete="new-password"
+                readOnly
+                onFocus={unlockPasswordField}
+                value={confirmPassword}
+                onChange={(event) => setConfirmPassword(event.target.value)}
+                placeholder="Confirm password"
+                aria-label="Confirm new Main Admin password"
+                className="w-full rounded-xl border border-cyan-500/30 bg-[#060e20] px-3.5 py-2.5 pr-10 text-xs text-white placeholder-slate-500 focus:border-cyan-300 focus:outline-none"
+              />
+              <button type="button" onClick={() => setShowConfirmPassword(!showConfirmPassword)} aria-label={showConfirmPassword ? 'Hide confirmation password' : 'Show confirmation password'} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white">
+                {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
             <button
               type="submit"
               disabled={loading}
@@ -1076,22 +1108,25 @@ export default function AuthPortal({
 
         {/* ----------------- LOGIN TAB FORMS ----------------- */}
         {activeTab === 'login' && (
-          <form onSubmit={handleLoginSubmit} className="space-y-4 text-left animate-fade-in">
+          <form onSubmit={handleLoginSubmit} autoComplete="off" className="space-y-4 text-left animate-fade-in">
 
             {/* STUDENT LOGIN */}
             {selectedRole === 'student' && (
               <div>
                 <label className="block text-[11px] font-semibold text-slate-300 mb-1 flex justify-between">
-                  <span>Student Name</span>
+                  <span>Email Address</span>
                   <span className="text-[10px] text-cyan-400">Government Engineering College</span>
                 </label>
                 <div className="relative">
                   <input
-                    type="text"
+                    type="email"
                     required
+                    autoComplete="off"
+                    readOnly
+                    onFocus={unlockPasswordField}
                     value={identifier}
                     onChange={(e) => setIdentifier(e.target.value)}
-                    placeholder="Enter your registered student name"
+                    placeholder="Enter your registered email"
                     className="w-full px-3.5 py-2.5 rounded-xl bg-[#060e20] border border-cyan-500/30 text-white placeholder-slate-500 text-xs focus:outline-none focus:border-cyan-300"
                   />
                 </div>
@@ -1109,6 +1144,9 @@ export default function AuthPortal({
                   <input
                     type="text"
                     required
+                    autoComplete="off"
+                    readOnly
+                    onFocus={unlockPasswordField}
                     value={identifier}
                     onChange={(e) => setIdentifier(e.target.value)}
                     placeholder="e.g. EMP-CSE-042 or faculty email"
@@ -1129,6 +1167,9 @@ export default function AuthPortal({
                   <input
                     type="text"
                     required
+                    autoComplete="off"
+                    readOnly
+                    onFocus={unlockPasswordField}
                     value={identifier}
                     onChange={(e) => setIdentifier(e.target.value)}
                     placeholder="Enter registered Main Admin email"
@@ -1145,6 +1186,9 @@ export default function AuthPortal({
                 <input
                   type={showPassword ? 'text' : 'password'}
                   required
+                  autoComplete="new-password"
+                  readOnly
+                  onFocus={unlockPasswordField}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="Enter your password"

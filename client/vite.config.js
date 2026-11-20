@@ -28,6 +28,10 @@ export default defineConfig({
         target: flaskApiTarget,
         changeOrigin: true
       },
+      '/lost-found': {
+        target: flaskApiTarget,
+        changeOrigin: true
+      },
       '/canteen-admin': {
         target: flaskApiTarget,
         changeOrigin: true

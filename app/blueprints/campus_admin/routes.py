@@ -11,12 +11,12 @@ from flask import current_app, g, jsonify, request
 from sqlalchemy import func, or_
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
-from app.admin_registry import active_admin_modules, seed_default_modules
+from app.admin_registry import active_admin_modules, default_permissions_for_module, seed_default_modules
 from app.blueprints.campus_admin import campus_admin_bp
 from app.database import db
 from app.models import (
     AdminAssignment, AdminModule, AuditLog, MainAdminHandoff, MainAdminSetupState,
-    Notification, User,
+    LostFoundClaim, Notification, User,
 )
 
 
@@ -38,9 +38,12 @@ def _audit(actor, action, module='admin', target=None, details=None):
     return entry
 
 
-def _record_student_deletion_failure(actor, user_id, identifier, reason, status):
+def _record_account_deletion_failure(actor, user_id, identifier, reason, status, account_role=None):
     entry = AuditLog(
-        action='STUDENT_ACCOUNT_DELETION_FAILED',
+        action=(
+            'STUDENT_ACCOUNT_DELETION_FAILED'
+            if account_role == 'student' else 'USER_ACCOUNT_DELETION_FAILED'
+        ),
         module='accounts',
         user_id=actor.id,
         actor_id=actor.id,
@@ -56,7 +59,7 @@ def _record_student_deletion_failure(actor, user_id, identifier, reason, status)
         db.session.commit()
     except SQLAlchemyError:
         db.session.rollback()
-        current_app.logger.exception('Failed to record a student account deletion failure.')
+        current_app.logger.exception('Failed to record an account deletion failure.')
         return _error('The deletion could not be completed or audited.', 500)
     return _error(reason, status)
 
@@ -503,42 +506,59 @@ def update_user_status(user_id):
 
 @campus_admin_bp.route('/users/<int:user_id>', methods=['DELETE'])
 @_main_admin_required
-def delete_student_account(user_id):
+def delete_user_account(user_id):
+    """Permanently remove a student or faculty account from the registry.
+
+    This deliberately does not implement a soft delete.  Once the Main Admin
+    confirms the identifier, the account row is removed so the same email and
+    institutional identifier can be registered again.
+    """
     data = request.get_json(silent=True)
     identifier = data.get('identifier') if isinstance(data, dict) else None
     if not isinstance(identifier, str) or not identifier.strip():
-        return _record_student_deletion_failure(
-            g.campus_admin_user, user_id, None, 'A student identifier is required.', 400,
+        return _record_account_deletion_failure(
+            g.campus_admin_user, user_id, None, 'A student or faculty identifier is required.', 400,
         )
     identifier = identifier.strip()
     target = db.session.get(User, user_id)
     if not target:
-        return _record_student_deletion_failure(
-            g.campus_admin_user, user_id, identifier, 'Student account not found.', 404,
+        return _record_account_deletion_failure(
+            g.campus_admin_user, user_id, identifier, 'Account not found.', 404,
         )
-    if target.role != 'student':
-        return _record_student_deletion_failure(
-            g.campus_admin_user, user_id, target.usn_or_emp_id, 'Student account not found.', 404,
+    if target.role not in ('student', 'teacher', 'faculty'):
+        return _record_account_deletion_failure(
+            g.campus_admin_user, user_id, target.usn_or_emp_id, 'Only student or faculty accounts can be deleted here.', 403,
         )
-    if not target.usn_or_emp_id or target.usn_or_emp_id != identifier:
-        return _record_student_deletion_failure(
+    if not target.usn_or_emp_id or target.usn_or_emp_id.strip().lower() != identifier.lower():
+        return _record_account_deletion_failure(
             g.campus_admin_user, user_id, target.usn_or_emp_id,
-            'The student identifier did not match this account.', 409,
+            'The institutional identifier did not match this account.', 409, target.role,
         )
 
     actor = g.campus_admin_user
     audit_entry = AuditLog(
-        action='STUDENT_ACCOUNT_DELETION_SUCCEEDED',
+        action=(
+            'STUDENT_ACCOUNT_DELETION_SUCCEEDED'
+            if target.role == 'student' else 'USER_ACCOUNT_DELETION_SUCCEEDED'
+        ),
         module='accounts',
         user_id=actor.id,
         actor_id=actor.id,
         target_user_id=target.id,
         details=(
-            f'result=success; student_identifier={target.usn_or_emp_id}; '
+            f'result=success; account_role={target.role}; '
+            f'institutional_identifier={target.usn_or_emp_id}; '
             f'admin={actor.email}'
         ),
         ip_address=request.remote_addr,
     )
+
+    # Remove relationships whose database schema may predate the current
+    # ON DELETE rules.  This keeps deletion reliable for existing databases.
+    MainAdminHandoff.query.filter_by(claimed_by_id=target.id).update(
+        {MainAdminHandoff.claimed_by_id: None}, synchronize_session=False,
+    )
+    LostFoundClaim.query.filter_by(claimant_id=target.id).delete(synchronize_session=False)
     db.session.delete(target)
     db.session.add(audit_entry)
     try:
@@ -546,14 +566,14 @@ def delete_student_account(user_id):
     except SQLAlchemyError:
         db.session.rollback()
         current_app.logger.exception(
-            'Student account deletion failed for user id %s.', user_id,
+            'Account deletion failed for user id %s.', user_id,
         )
-        return _record_student_deletion_failure(
-            actor, user_id, identifier, 'Student account deletion failed.', 500,
+        return _record_account_deletion_failure(
+            actor, user_id, identifier, 'Account deletion failed.', 500,
         )
     return jsonify(
         success=True,
-        message='Student account permanently deleted.',
+        message='Account permanently deleted. The email and institutional identifier can now be registered again.',
         deleted_user_id=user_id,
         identifier=identifier,
     )
@@ -636,10 +656,15 @@ def assignments():
         return _error('An active configured module is required.', 400)
     if not user.is_active or not user.is_verified:
         return _error('Only active, verified student or faculty accounts can receive assignments.', 400)
+    if module.key == 'lost_found' and user.role not in ('teacher', 'faculty'):
+        return _error('Lost & Found administration can only be assigned to faculty accounts.', 400)
     if AdminAssignment.query.filter_by(user_id=user.id, module_id=module.id).first():
         return _error('An assignment for this user and module already exists.', 409)
-    permissions = data.get('permissions', ['notifications:read', 'notifications:send', 'activity:read'])
-    supported_permissions = {'notifications:read', 'notifications:send', 'activity:read'}
+    permissions = data.get('permissions', default_permissions_for_module(module.key))
+    supported_permissions = {
+        'notifications:read', 'notifications:send', 'activity:read',
+        'reports:view', 'reports:edit', 'reports:delete',
+    }
     if not isinstance(permissions, list) or not all(
         isinstance(value, str) and value in supported_permissions for value in permissions
     ):
@@ -677,6 +702,8 @@ def update_assignment(assignment_id):
             or not new_user.is_active or not new_user.is_verified
         ):
             return _error('Transfer requires an active, verified student or faculty target.', 400)
+        if item.module.key == 'lost_found' and new_user.role not in ('teacher', 'faculty'):
+            return _error('Lost & Found administration can only be assigned to faculty accounts.', 400)
         if AdminAssignment.query.filter(
             AdminAssignment.user_id == new_user.id,
             AdminAssignment.module_id == item.module_id,
@@ -692,6 +719,8 @@ def update_assignment(assignment_id):
         new_module = _assigned_module(data['module_id'])
         if not new_module:
             return _error('An active configured module is required.', 400)
+        if new_module.key == 'lost_found' and item.user.role not in ('teacher', 'faculty'):
+            return _error('Lost & Found administration can only be assigned to faculty accounts.', 400)
         if AdminAssignment.query.filter(
             AdminAssignment.user_id == item.user_id,
             AdminAssignment.module_id == new_module.id,
