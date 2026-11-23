@@ -22,15 +22,17 @@
             <span class="badge {% if item.report_type == 'lost' %}bg-danger{% else %}bg-success{% endif %} text-uppercase px-3 py-1 mb-2">
               {{ item.report_type }}
             </span>
+            <span class="badge bg-primary mb-2"><i class="fa-solid fa-building me-1"></i>{{ item.department }}</span>
             <span class="badge bg-secondary mb-2">{{ item.category }}</span>
-            {% if item.color_hint %}<span class="badge bg-light text-dark border mb-2">{{ item.color_hint }}</span>{% endif %}
+            {% if item.color or item.color_hint %}<span class="badge bg-light text-dark border mb-2"><i class="fa-solid fa-palette me-1"></i>{{ item.color or item.color_hint }}</span>{% endif %}
+            {% if item.item_date %}<span class="badge bg-info text-dark mb-2"><i class="fa-solid fa-calendar-day me-1"></i>{{ item.item_date }} ({{ item.time_slot }})</span>{% endif %}
             {% if item.verified_by_admin_id %}<span class="badge bg-info text-dark mb-2"><i class="fa-solid fa-badge-check me-1"></i>Admin Verified</span>{% endif %}
             {% if item.is_duplicate %}<span class="badge bg-secondary mb-2" title="Same reporter, same item - no duplicate alerts were sent"><i class="fa-regular fa-copy me-1"></i>Duplicate of report #{{ item.duplicate_of_id }}</span>{% endif %}
             <h3 class="fw-bold text-dark mb-1">{{ item.title }}</h3>
           </div>
           <div class="text-end">
             <span class="badge {% if item.status == 'closed' %}bg-success{% elif item.status == 'claimed' %}bg-warning text-dark{% else %}bg-dark{% endif %} px-3 py-2 text-uppercase">{{ item.status }}</span>
-            {% if (is_owner or is_admin) and item.status != 'closed' %}
+            {% if (is_owner or can_manage) and item.status != 'closed' %}
             <form method="POST" action="{{ url_for('lost_found.delete_item', item_id=item.id) }}"
                   onsubmit="return confirm('Delete this report and its photo permanently? This cannot be undone.');">
               <button type="submit" class="btn btn-sm btn-outline-danger rounded-pill mt-2">
@@ -44,7 +46,7 @@
         {% if item.photo_url %}
         <div class="rounded-3 overflow-hidden mb-4 border position-relative" style="max-height: 380px;">
           <img src="{{ item.photo_url }}" alt="{{ item.title }}" class="w-100 h-100 object-fit-cover">
-          {% if is_owner or is_admin %}
+          {% if is_owner or can_manage %}
           <form method="POST" action="{{ url_for('lost_found.delete_item_photo', item_id=item.id) }}"
                 class="position-absolute top-0 end-0 m-2"
                 onsubmit="return confirm('Delete this photo? The report itself will stay, only the image is removed.');">
@@ -61,13 +63,27 @@
 
         <div class="row g-3 p-3 bg-light rounded-3 mb-4">
           <div class="col-sm-6">
+            <span class="text-muted small fw-bold d-block">Department / Branch</span>
+            <span class="fw-bold text-dark"><i class="fa-solid fa-building text-primary me-1"></i> {{ item.department }}</span>
+          </div>
+          <div class="col-sm-6">
+            <span class="text-muted small fw-bold d-block">Item Colour</span>
+            <span class="fw-bold text-dark"><i class="fa-solid fa-palette text-secondary me-1"></i> {{ item.color or item.color_hint or 'Not specified' }}</span>
+          </div>
+          <div class="col-sm-6">
             <span class="text-muted small fw-bold d-block">Reported Location</span>
             <span class="fw-bold text-dark"><i class="fa-solid fa-location-dot text-danger me-1"></i> {{ item.location_reported }}</span>
           </div>
           <div class="col-sm-6">
-            <span class="text-muted small fw-bold d-block">Incident Timestamp</span>
-            <span class="fw-bold text-dark"><i class="fa-solid fa-clock text-primary me-1"></i> {{ item.date_time_reported|ist }}</span>
+            <span class="text-muted small fw-bold d-block">Incident Date &amp; Time</span>
+            <span class="fw-bold text-dark"><i class="fa-solid fa-clock text-primary me-1"></i> {{ item.item_date or (item.date_time_reported|ist) }} &bull; {{ item.time_slot }}</span>
           </div>
+          {% if item.identification_marks %}
+          <div class="col-12">
+            <span class="text-muted small fw-bold d-block">Identification Marks</span>
+            <span class="fw-bold text-dark"><i class="fa-solid fa-fingerprint text-warning me-1"></i> {{ item.identification_marks }}</span>
+          </div>
+          {% endif %}
           <div class="col-sm-6">
             <span class="text-muted small fw-bold d-block">Reported By</span>
             {% if is_member or is_owner or is_admin %}

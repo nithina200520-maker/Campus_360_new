@@ -117,15 +117,24 @@
           </div>
         </div>
 
-        <!-- How the reunification flow works -->
+        <!-- How the targeted matching flow works -->
         <div class="alert alert-success d-flex align-items-center rounded-3 mb-4" role="alert">
-          <i class="fa-solid fa-people-group fa-2x text-success me-3"></i>
+          <i class="fa-solid fa-shield-halved fa-2x text-success me-3"></i>
           <div class="small">
-            <strong>How it works:</strong> a <strong>Lost</strong> report is sent to every registered campus member immediately. If you have <strong>found</strong> someone's item, open that lost report and use <strong>"I found this"</strong> to notify the owner directly with your contact details. Your name and contact are shown publicly so owners and finders can coordinate the return &mdash; no guesswork, no waiting.
+            <strong>Targeted Reunification & Matching:</strong> When you submit a report, our targeted matching system checks existing reports across category, title, colour, description, and location. <strong>Notifications are sent strictly to relevant users with matching items</strong> &mdash; never broadcast to all students.
           </div>
         </div>
 
-        <form method="POST" action="{{ url_for('lost_found.report_item') }}" enctype="multipart/form-data">
+        <!-- Form Validation Alert Banner (populated if required fields are missing) -->
+        <div id="formValidationError" class="alert alert-danger d-none align-items-center rounded-3 mb-4" role="alert">
+          <i class="fa-solid fa-triangle-exclamation fa-2x me-3 text-danger"></i>
+          <div>
+            <strong>Please complete all required fields:</strong>
+            <div id="validationMissingList" class="small mt-1 text-light"></div>
+          </div>
+        </div>
+
+        <form method="POST" id="reportItemForm" action="{{ url_for('lost_found.report_item') }}" enctype="multipart/form-data">
           
           <div class="row g-3 mb-3">
             <div class="col-md-6">
@@ -145,40 +154,123 @@
             </div>
           </div>
 
+          <!-- 1. Department / Branch Selection (Radio Buttons) -->
           <div class="mb-3">
-            <label class="form-label fw-bold small text-secondary">Item Title / Headline <span class="text-danger">*</span></label>
-            <input type="text" name="title" class="form-control" placeholder="e.g. Blue Stainless Steel Flask / Casio Scientific Calculator" required>
+            <label class="form-label fw-bold small text-secondary">College Department / Branch <span class="text-danger">*</span></label>
+            <div class="d-flex flex-wrap gap-3 p-3 rounded-3" style="background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(140, 150, 220, 0.25);">
+              {% for b in branches %}
+              <div class="form-check form-check-inline m-0">
+                <input class="form-check-input" type="radio" name="department" id="branch_{{ b }}" value="{{ b }}" {% if (user.department and (b.lower() in user.department.lower() or user.department.lower() in b.lower())) or (not user.department and b == 'CSE') %}checked{% endif %} required>
+                <label class="form-check-label text-light small fw-semibold" for="branch_{{ b }}">{{ b }}</label>
+              </div>
+              {% endfor %}
+            </div>
+            <div class="form-text small">Select the college branch/department where this item belongs or was last seen.</div>
+          </div>
+
+          <!-- 4. Item Title / Headline -->
+          <div class="mb-3">
+            <label class="form-label fw-bold small text-secondary">Item Title / Name <span class="text-danger">*</span></label>
+            <input type="text" name="title" class="form-control" placeholder="e.g. Casio Scientific Calculator / Blue Stainless Steel Flask / Titan Watch" required>
           </div>
 
           <div class="row g-3 mb-3">
-            <div class="col-md-6">
-              <label class="form-label fw-bold small text-secondary">Campus Location <span class="text-danger">*</span></label>
+            <!-- 2. Item Colour -->
+            <div class="col-md-4">
+              <label class="form-label fw-bold small text-secondary">Item Colour <span class="text-danger">*</span></label>
+              <input type="text" name="color" class="form-control" placeholder="e.g. Matte Black / Navy Blue / Silver" required>
+            </div>
+            <!-- 7. Last Seen Location -->
+            <div class="col-md-4">
+              <label class="form-label fw-bold small text-secondary">Last Seen Location <span class="text-danger">*</span></label>
               <input type="text" name="location_reported" class="form-control" placeholder="e.g. CSE Lab 2 / Canteen Terrace / Central Library" required>
             </div>
-            <div class="col-md-3">
-              <label class="form-label fw-bold small text-secondary">Dominant Colour</label>
-              <input type="text" name="color_hint" class="form-control" placeholder="e.g. Black">
-            </div>
-            <div class="col-md-3">
-              <label class="form-label fw-bold small text-secondary">Contact Phone</label>
-              <input type="text" name="contact_phone" class="form-control" value="{{ user.phone or '' }}" placeholder="+91 98450 XXXXX">
+            <!-- 5. Contact Number -->
+            <div class="col-md-4">
+              <label class="form-label fw-bold small text-secondary">Contact Number <span class="text-danger">*</span></label>
+              <input type="tel" name="contact_phone" class="form-control" value="{{ user.phone or '' }}" placeholder="+91 98450 XXXXX" required>
             </div>
           </div>
 
+          <div class="row g-3 mb-3">
+            <!-- 8. Lost/Found Date (DD/MM/YYYY format) -->
+            <div class="col-md-6">
+              <label class="form-label fw-bold small text-secondary">Lost / Found Date (DD/MM/YYYY) <span class="text-danger">*</span></label>
+              <div class="input-group">
+                <input type="text" name="item_date" id="itemDateInput" class="form-control" placeholder="DD/MM/YYYY" pattern="^(0[1-9]|[12][0-9]|3[01])/(0[1-9]|1[0-2])/\d{4}$" title="Please enter in DD/MM/YYYY format (e.g. 23/11/2026)" required>
+                <div class="position-relative d-inline-flex">
+                  <button class="btn btn-outline-secondary rounded-end rounded-start-0 px-3 d-flex align-items-center justify-content-center h-100" type="button" title="Open Calendar" tabindex="-1">
+                    <i class="fa-solid fa-calendar-day"></i>
+                  </button>
+                  <input type="date" id="nativeDatePicker"
+                         tabindex="-1"
+                         aria-label="Pick date from calendar"
+                         style="position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; z-index: 5;"
+                         onfocus="syncDateToPicker(this)"
+                         onmousedown="syncDateToPicker(this)"
+                         onclick="syncDateToPicker(this); try { this.showPicker(); } catch(e) {}"
+                         onchange="syncPickerToDate(this)">
+                </div>
+              </div>
+              <div class="form-text small">Date format: DD/MM/YYYY (click calendar icon or type directly).</div>
+            </div>
+
+            <!-- 9. Time Radio Buttons (Morning, Afternoon, Night) -->
+            <div class="col-md-6">
+              <label class="form-label fw-bold small text-secondary">Incident Time Slot <span class="text-danger">*</span></label>
+              <div class="d-flex flex-wrap gap-3 p-2 rounded-3" style="background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(140, 150, 220, 0.25); min-height: 42px; align-items: center;">
+                <div class="form-check form-check-inline m-0">
+                  <input class="form-check-input" type="radio" name="time_slot" id="time_morning" value="Morning" checked required>
+                  <label class="form-check-label text-light small fw-semibold" for="time_morning"><i class="fa-regular fa-sun text-warning me-1"></i> Morning</label>
+                </div>
+                <div class="form-check form-check-inline m-0">
+                  <input class="form-check-input" type="radio" name="time_slot" id="time_afternoon" value="Afternoon" required>
+                  <label class="form-check-label text-light small fw-semibold" for="time_afternoon"><i class="fa-solid fa-cloud-sun text-warning me-1"></i> Afternoon</label>
+                </div>
+                <div class="form-check form-check-inline m-0">
+                  <input class="form-check-input" type="radio" name="time_slot" id="time_night" value="Night" required>
+                  <label class="form-check-label text-light small fw-semibold" for="time_night"><i class="fa-solid fa-moon text-info me-1"></i> Night</label>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 10. Identification Marks (Optional) -->
           <div class="mb-3">
-            <label class="form-label fw-bold small text-secondary">Item Description & Identifiers <span class="text-danger">*</span></label>
-            <textarea name="description" rows="3" class="form-control" placeholder="Mention color, brand, scratches, USN stickers, keychains, or unique marks..." required></textarea>
+            <label class="form-label fw-bold small text-secondary">Identification Marks <span class="text-muted fw-normal">(Optional unique marks)</span></label>
+            <input type="text" name="identification_marks" class="form-control" placeholder="e.g. Scratches on back cover, Batman sticker, cracked top right corner, engraving">
+            <div class="form-text small">Mention any scratches, damage, stickers, unique decals or engravings that distinguish this item.</div>
           </div>
 
+          <!-- 6. Item Description -->
+          <div class="mb-3">
+            <label class="form-label fw-bold small text-secondary">Item Description <span class="text-danger">*</span></label>
+            <textarea name="description" rows="3" class="form-control" placeholder="Describe the item, surroundings where it was lost or found, brand, serial number prefix..." required></textarea>
+          </div>
+
+          <!-- 11. Upload Photograph (JPG, PNG, WEBP, max 8 MB) -->
           <div class="mb-4">
-            <label class="form-label fw-bold small text-secondary">Item Photograph (JPG / PNG / WEBP, max 8 MB)</label>
-            <input type="file" name="photo" class="form-control" accept="image/png,image/jpeg,image/webp">
-            <div class="form-text small">Uploads are content-validated (true image bytes only) and stored securely. Your name and contact number are shown publicly so a finder can reach you directly to return your item.</div>
+            <label class="form-label fw-bold small text-secondary">Upload Photograph <span class="text-muted fw-normal">(Optional — JPG, PNG, WEBP, max 8 MB)</span></label>
+            <input type="file" name="photo" id="photoInput" class="form-control" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" onchange="handlePhotoSelect(this)">
+            <div class="form-text small">Uploads are content-validated (true image bytes only) and stored securely. Supported formats: JPG, PNG, WEBP (up to 8 MB).</div>
+            <!-- Instant Live Photo Preview Card -->
+            <div id="photoPreviewCard" class="mt-3 p-3 rounded-3 d-none" style="background: rgba(255, 255, 255, 0.05); border: 1px dashed rgba(67, 233, 214, 0.5); max-width: 320px;">
+              <div class="small fw-bold text-success mb-2 d-flex align-items-center gap-1">
+                <i class="fa-solid fa-circle-check"></i> Photograph Selected
+              </div>
+              <img id="photoPreviewImg" src="" alt="Selected Preview" class="rounded-2 shadow-sm w-100" style="max-height: 200px; object-fit: cover;">
+              <div class="d-flex justify-content-between align-items-center mt-2">
+                <span id="photoPreviewDetails" class="small text-muted text-truncate" style="max-width: 200px;"></span>
+                <button type="button" class="btn btn-sm btn-outline-danger rounded-pill px-2 py-0" onclick="clearPhotoSelection()" title="Remove photograph">
+                  <i class="fa-solid fa-xmark me-1"></i>Remove
+                </button>
+              </div>
+            </div>
           </div>
 
           <div class="d-flex justify-content-between align-items-center pt-3 border-top">
             <a href="{{ url_for('lost_found.index') }}" class="btn btn-outline-secondary rounded-pill px-4">Cancel</a>
-            <button type="submit" class="btn btn-success btn-lg rounded-pill px-5 fw-bold shadow-sm">
+            <button type="submit" id="submitReportBtn" class="btn btn-success btn-lg rounded-pill px-5 fw-bold shadow-sm">
               <i class="fa-solid fa-paper-plane me-1"></i> Submit Report
             </button>
           </div>
@@ -190,5 +282,112 @@
     </div>
   </div>
 </div>
-<script>document.body.classList.add('lostfound-scene');</script>
+<script>
+  document.body.classList.add('lostfound-scene');
+
+  // Auto-fill today's date if date field is empty
+  (function initDefaultDate() {
+    const input = document.getElementById('itemDateInput');
+    if (input && !input.value.trim()) {
+      const today = new Date();
+      const dd = String(today.getDate()).padStart(2, '0');
+      const mm = String(today.getMonth() + 1).padStart(2, '0');
+      const yyyy = today.getFullYear();
+      input.value = `${dd}/${mm}/${yyyy}`;
+    }
+  })();
+
+  function syncDateToPicker(picker) {
+    if (!picker) picker = document.getElementById('nativeDatePicker');
+    const input = document.getElementById('itemDateInput');
+    if (!input || !picker) return;
+    const cur = input.value.trim();
+    const match = cur.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+    if (match) {
+      const day = match[1].padStart(2, '0');
+      const month = match[2].padStart(2, '0');
+      const year = match[3];
+      picker.value = `${year}-${month}-${day}`;
+    }
+  }
+
+  function syncPickerToDate(picker) {
+    if (!picker) picker = document.getElementById('nativeDatePicker');
+    const input = document.getElementById('itemDateInput');
+    if (!input || !picker || !picker.value) return;
+    const parts = picker.value.split('-');
+    if (parts.length === 3) {
+      input.value = `${parts[2]}/${parts[1]}/${parts[0]}`;
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+  }
+
+  // Handle instant live photograph preview
+  function handlePhotoSelect(input) {
+    const card = document.getElementById('photoPreviewCard');
+    const img = document.getElementById('photoPreviewImg');
+    const details = document.getElementById('photoPreviewDetails');
+    if (input.files && input.files[0]) {
+      const file = input.files[0];
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        img.src = e.target.result;
+        const sizeMb = (file.size / (1024 * 1024)).toFixed(2);
+        details.textContent = `${file.name} (${sizeMb} MB)`;
+        card.classList.remove('d-none');
+      };
+      reader.readAsDataURL(file);
+    } else {
+      clearPhotoSelection();
+    }
+  }
+
+  function clearPhotoSelection() {
+    const input = document.getElementById('photoInput');
+    const card = document.getElementById('photoPreviewCard');
+    const img = document.getElementById('photoPreviewImg');
+    const details = document.getElementById('photoPreviewDetails');
+    if (input) input.value = '';
+    if (img) img.src = '';
+    if (details) details.textContent = '';
+    if (card) card.classList.add('d-none');
+  }
+
+  // Intercept form submit to ensure clear user guidance on any missing required field
+  document.getElementById('reportItemForm').addEventListener('submit', function(e) {
+    const form = this;
+    const title = form.elements['title'] ? form.elements['title'].value.trim() : '';
+    const color = form.elements['color'] ? form.elements['color'].value.trim() : '';
+    const location = form.elements['location_reported'] ? form.elements['location_reported'].value.trim() : '';
+    const date = form.elements['item_date'] ? form.elements['item_date'].value.trim() : '';
+    const desc = form.elements['description'] ? form.elements['description'].value.trim() : '';
+
+    const missing = [];
+    if (!title) missing.push('Item Title / Name');
+    if (!color) missing.push('Item Colour');
+    if (!location) missing.push('Last Seen Location');
+    if (!date) missing.push('Lost / Found Date');
+    if (!desc) missing.push('Item Description');
+
+    const errBox = document.getElementById('formValidationError');
+    const missingList = document.getElementById('validationMissingList');
+
+    if (missing.length > 0) {
+      e.preventDefault();
+      missingList.textContent = 'Missing: ' + missing.join(', ');
+      errBox.classList.remove('d-none');
+      errBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return false;
+    }
+
+    errBox.classList.add('d-none');
+    const btn = document.getElementById('submitReportBtn');
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-2"></i> Submitting &amp; Uploading...';
+    }
+    return true;
+  });
+</script>
 {% endblock %}

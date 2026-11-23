@@ -28,6 +28,8 @@ def create_app(config_name="default"):
     cfg = config_by_name.get(config_name, Config)
     app.config.from_object(cfg)
     app.config['BASE_DIR'] = Config.BASE_DIR
+    app.config['TEMPLATES_AUTO_RELOAD'] = True
+    app.jinja_env.auto_reload = True
 
     # Ensure upload directories exist
     upload_dirs = [
@@ -156,6 +158,15 @@ def create_app(config_name="default"):
     app.register_blueprint(notifications_bp)
     app.register_blueprint(campus_admin_bp)
 
+    # Disable HTTP caching for all dynamic pages so browser always renders fresh templates
+    @app.after_request
+    def set_no_cache_headers(response):
+        if 'Cache-Control' not in response.headers or 'max-age=31536000' not in response.headers.get('Cache-Control', ''):
+            response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate, max-age=0'
+            response.headers['Pragma'] = 'no-cache'
+            response.headers['Expires'] = '0'
+        return response
+
     # Register Error Handlers
     @app.errorhandler(403)
     def forbidden_error(error):
@@ -168,6 +179,23 @@ def create_app(config_name="default"):
     @app.errorhandler(500)
     def internal_error(error):
         db.session.rollback()
+        import traceback
+        tb = traceback.format_exc()
+        app.logger.error(f"[500 SYSTEM ERROR] {error}\n{tb}")
+        print(f"[500 SYSTEM ERROR] {error}\n{tb}", flush=True)
+        try:
+            from app.models import AuditLog
+            u = get_current_user()
+            AuditLog.log(
+                action='SYSTEM_500_ERROR',
+                module='SYSTEM',
+                user_id=u.id if u else None,
+                details=f"500 Error: {str(error)[:100]} | Trace: {tb[-300:]}"
+            )
+            db.session.commit()
+        except Exception as e:
+            db.session.rollback()
+            print(f"[ERROR LOGGING AUDIT] {e}", flush=True)
         return render_template('errors/500.html', user=get_current_user()), 500
 
     return app

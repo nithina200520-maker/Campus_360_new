@@ -401,6 +401,11 @@ class LostFoundItem(db.Model):
     photo_url = db.Column(db.String(255), nullable=True)
     image_feature_vector = db.Column(db.Text, nullable=True) # JSON serialized embedding
     color_hint = db.Column(db.String(30), nullable=True) # Phase 4: dominant item colour for contextual ranking
+    color = db.Column(db.String(50), nullable=True) # Item Colour
+    department = db.Column(db.String(50), nullable=True, default='CSE') # Branch: CSE, ECE, EEE, Civil, Mechanical, AIML, ISE, Other
+    item_date = db.Column(db.String(20), nullable=True) # Date in DD/MM/YYYY format
+    time_slot = db.Column(db.String(20), nullable=True) # Morning, Afternoon, Night
+    identification_marks = db.Column(db.Text, nullable=True) # Scratches, damage, stickers, unique marks
     status = db.Column(db.String(20), nullable=False, default='open') # 'open', 'matched', 'claimed', 'closed'
     contact_phone = db.Column(db.String(20), nullable=True)
     resolution_note = db.Column(db.Text, nullable=True) # Phase 4: admin dispute / handover remarks
@@ -421,6 +426,11 @@ class LostFoundItem(db.Model):
             "report_type": self.report_type,
             "title": self.title,
             "category": self.category,
+            "department": self.department,
+            "color": self.color or self.color_hint,
+            "item_date": self.item_date,
+            "time_slot": self.time_slot,
+            "identification_marks": self.identification_marks,
             "location_reported": self.location_reported,
             "date_time_reported": self.date_time_reported.strftime('%Y-%m-%d %H:%M') if self.date_time_reported else None,
             "description": self.description,

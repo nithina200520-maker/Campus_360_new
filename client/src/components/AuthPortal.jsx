@@ -133,6 +133,9 @@ export default function AuthPortal({
   const handleTabSwitch = (tab) => {
     setSetupToken('');
     setHandoffCode('');
+    setIdentifier('');
+    setPassword('');
+    setConfirmPassword('');
     if (mainAdminOnly && tab === 'register') {
       setRegistrationMode(setupAvailable ? 'setup' : 'handoff');
     }
@@ -247,7 +250,10 @@ export default function AuthPortal({
       }
 
       setActiveTab('login');
-      setIdentifier(identifier.trim().toUpperCase());
+      setIdentifier('');
+      setFullName('');
+      setEmail('');
+      setPhone('');
       setPassword('');
       setConfirmPassword('');
       setSuccessMessage(data.message || 'Registration complete. Please log in.');
@@ -265,10 +271,7 @@ export default function AuthPortal({
     setSuccessMessage('');
 
     if (!identifier || !password) {
-      const missingMessage = selectedRole === 'student'
-        ? 'Please provide your registered email and password.'
-        : 'Please provide your registered ID or email and password.';
-      setErrorMessage(missingMessage);
+      setErrorMessage('Please provide your registered USN/ID or email and password.');
       return;
     }
 
@@ -1114,19 +1117,19 @@ export default function AuthPortal({
             {selectedRole === 'student' && (
               <div>
                 <label className="block text-[11px] font-semibold text-slate-300 mb-1 flex justify-between">
-                  <span>Email Address</span>
+                  <span>University USN or Email Address</span>
                   <span className="text-[10px] text-cyan-400">Government Engineering College</span>
                 </label>
                 <div className="relative">
                   <input
-                    type="email"
+                    type="text"
                     required
                     autoComplete="off"
                     readOnly
                     onFocus={unlockPasswordField}
                     value={identifier}
                     onChange={(e) => setIdentifier(e.target.value)}
-                    placeholder="Enter your registered email"
+                    placeholder="Enter your registered USN or email"
                     className="w-full px-3.5 py-2.5 rounded-xl bg-[#060e20] border border-cyan-500/30 text-white placeholder-slate-500 text-xs focus:outline-none focus:border-cyan-300"
                   />
                 </div>

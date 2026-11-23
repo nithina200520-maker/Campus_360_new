@@ -34,6 +34,9 @@ def validate_password_strength(password: str) -> bool:
 def provision_admin(name=None, email=None, password=None, department="System Administration", phone=None):
     app = create_app()
     with app.app_context():
+        # Ensure database tables exist before provisioning
+        db.create_all()
+
         print("\n" + "=" * 65)
         print("  SMART CAMPUS 360 - SECURE MAIN ADMIN PROVISIONING")
         print("  Government Engineering College, Mosalehosahalli (Hassan)")

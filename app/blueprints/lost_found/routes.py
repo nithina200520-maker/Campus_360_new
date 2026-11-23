@@ -1,4 +1,5 @@
 import os
+import re
 from datetime import datetime
 from pathlib import Path
 from werkzeug.utils import secure_filename
@@ -13,7 +14,53 @@ ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'webp'}
 MAX_PHOTO_BYTES = 8 * 1024 * 1024  # 8 MB upload ceiling
 
 def allowed_file(filename):
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+    return bool(filename and '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS)
+
+BRANCH_CHOICES = ['CSE', 'ECE', 'EEE', 'Civil', 'Mechanical', 'AIML', 'ISE', 'Other']
+
+def normalize_branch(val):
+    if not val:
+        return 'Other'
+    val = str(val).strip().upper()
+    if 'COMPUTER' in val or 'CSE' in val:
+        return 'CSE'
+    if 'ELECTRONIC' in val or 'ECE' in val:
+        return 'ECE'
+    if 'ELECTRICAL' in val or 'EEE' in val:
+        return 'EEE'
+    if 'CIVIL' in val:
+        return 'Civil'
+    if 'MECHANICAL' in val or 'MECH' in val:
+        return 'Mechanical'
+    if 'AIML' in val or 'AI' in val or 'ARTIFICIAL' in val:
+        return 'AIML'
+    if 'INFORMATION' in val or 'ISE' in val:
+        return 'ISE'
+    for b in BRANCH_CHOICES:
+        if b.upper() == val:
+            return b
+    return 'Other'
+
+def can_manage_lost_found_item(user, item):
+    """
+    Check if the user is authorized to manage/modify/delete this Lost & Found record:
+    - Main Admin has complete access across all departments.
+    - Appointed department admin can only manage records assigned to their department.
+    - Report owner can manage their own report.
+    - Other students cannot modify other students' records.
+    """
+    if not user:
+        return False
+    if getattr(user, 'role', '') == 'main_admin':
+        return True
+    if getattr(user, 'id', None) == item.user_id:
+        return True
+    if user.is_lost_found_admin():
+        admin_dept = getattr(user, 'department', '')
+        if not admin_dept:
+            return True
+        return normalize_branch(admin_dept) == normalize_branch(getattr(item, 'department', ''))
+    return False
 
 def _admin_ids():
     admins = User.query.filter(
@@ -32,6 +79,158 @@ def _notify_registered_user(user_id, **kwargs):
         return None
     return Notification.notify(user_id, **kwargs)
 
+def check_and_notify_matches(new_item, reporter):
+    """
+    Match items using category, title, colour, description, and location.
+    - When a student reports a lost item, notify only users with a potentially matching found-item report.
+    - When someone reports a found item, notify only the person who reported the matching lost item.
+    - Never send these notifications to all students.
+    """
+    opposite_type = 'found' if new_item.report_type == 'lost' else 'lost'
+    candidates = LostFoundItem.query.filter_by(
+        report_type=opposite_type,
+        status='open'
+    ).filter(LostFoundItem.user_id != reporter.id).all()
+
+    if not candidates:
+        return []
+
+    def extract_tokens(text):
+        if not text:
+            return set()
+        clean = re.sub(r'[^a-zA-Z0-9\s]', ' ', str(text).lower())
+        words = clean.split()
+        stop = {'a', 'an', 'the', 'in', 'on', 'at', 'near', 'of', 'and', 'or', 'is', 'item', 'my', 'lost', 'found', 'with', 'for', 'to'}
+        return {w for w in words if len(w) > 2 and w not in stop}
+
+    q_title = extract_tokens(new_item.title)
+    q_desc = extract_tokens(new_item.description)
+    q_all = q_title | q_desc
+    q_loc = extract_tokens(new_item.location_reported)
+    q_color = (new_item.color or new_item.color_hint or '').strip().lower()
+
+    matched_pairs = []
+
+    for cand in candidates:
+        c_title = extract_tokens(cand.title)
+        c_desc = extract_tokens(cand.description)
+        c_all = c_title | c_desc
+        c_loc = extract_tokens(cand.location_reported)
+        c_color = (cand.color or cand.color_hint or '').strip().lower()
+
+        # 1. Category comparison
+        cat_match = (new_item.category == cand.category)
+
+        # 2. Text similarity on title & description
+        intersection = len(q_all & c_all)
+        union = len(q_all | c_all)
+        text_sim = (intersection / union) if union > 0 else 0.0
+        title_keyword_match = bool(q_title & c_title)
+
+        # 3. Colour matching
+        color_match = False
+        if q_color and c_color:
+            color_match = (q_color in c_color or c_color in q_color or bool(set(q_color.split()) & set(c_color.split())))
+        elif q_color:
+            color_match = q_color in cand.description.lower() or q_color in cand.title.lower()
+        elif c_color:
+            color_match = c_color in new_item.description.lower() or c_color in new_item.title.lower()
+
+        # 4. Location match
+        loc_match = bool(q_loc & c_loc) or (
+            new_item.location_reported.lower() in cand.location_reported.lower() or
+            cand.location_reported.lower() in new_item.location_reported.lower()
+        )
+
+        score = 0.0
+        if cat_match:
+            score += 0.30
+        if title_keyword_match:
+            score += 0.35
+        score += min(0.20, text_sim * 0.40)
+        if color_match:
+            score += 0.15
+        if loc_match:
+            score += 0.15
+
+        # Check identification marks if present
+        q_marks = extract_tokens(getattr(new_item, 'identification_marks', '') or '')
+        c_marks = extract_tokens(getattr(cand, 'identification_marks', '') or '')
+        if q_marks and c_marks and (q_marks & c_marks):
+            score += 0.15
+
+        score = min(1.0, round(score, 2))
+
+        # Qualified potential match
+        if score >= 0.35 or (cat_match and (title_keyword_match or color_match or loc_match)):
+            matched_pairs.append((cand, score))
+
+            lost_id = new_item.id if new_item.report_type == 'lost' else cand.id
+            found_id = cand.id if new_item.report_type == 'lost' else new_item.id
+
+            existing_m = LostFoundMatch.query.filter_by(
+                lost_item_id=lost_id, found_item_id=found_id
+            ).first()
+            if not existing_m:
+                new_m = LostFoundMatch(
+                    lost_item_id=lost_id,
+                    found_item_id=found_id,
+                    similarity_score=score,
+                    composite_score=score,
+                    status='suggested'
+                )
+                db.session.add(new_m)
+
+            # Targeted notifications ONLY to the registered and relevant parties
+            if new_item.report_type == 'lost':
+                # Student reported lost item; cand is the open found item
+                # Notify finder
+                _notify_registered_user(
+                    cand.user_id,
+                    title=f"Potential match for your found item: '{cand.title}'",
+                    message=(f"A student reported losing '{new_item.title}' ({new_item.category}, "
+                             f"Branch: {new_item.department or 'General'}, Colour: {new_item.color or 'Not specified'}) "
+                             f"near {new_item.location_reported}. Click to check if this matches your found item."),
+                    category='match',
+                    link_url=url_for('lost_found.item_detail', item_id=cand.id),
+                    dedup_key=f"lf-match-lost:{new_item.id}:cand:{cand.id}:u{cand.user_id}"
+                )
+                # Notify the student who lost the item
+                _notify_registered_user(
+                    reporter.id,
+                    title=f"Potential match found for your lost '{new_item.title}'!",
+                    message=(f"A matching found item '{cand.title}' ({cand.category}) was reported "
+                             f"near {cand.location_reported}. Click to view details and contact the finder."),
+                    category='match',
+                    link_url=url_for('lost_found.item_detail', item_id=cand.id),
+                    dedup_key=f"lf-match-lost:{new_item.id}:cand:{cand.id}:u{reporter.id}"
+                )
+            else:
+                # User reported found item; cand is the open lost item
+                # Notify the student who lost the item
+                _notify_registered_user(
+                    cand.user_id,
+                    title=f"Good news! Matching found item: '{new_item.title}'",
+                    message=(f"Someone reported finding '{new_item.title}' ({new_item.category}, "
+                             f"Branch: {new_item.department or 'General'}, Colour: {new_item.color or 'Not specified'}) "
+                             f"near {new_item.location_reported}, matching your lost report '{cand.title}'! Click to view details."),
+                    category='match',
+                    link_url=url_for('lost_found.item_detail', item_id=new_item.id),
+                    dedup_key=f"lf-match-found:{new_item.id}:cand:{cand.id}:u{cand.user_id}"
+                )
+                # Notify the finder
+                _notify_registered_user(
+                    reporter.id,
+                    title=f"Potential owner match for '{new_item.title}'",
+                    message=(f"Your found report matches a previously reported lost item '{cand.title}' "
+                             f"({cand.category}). Click to view details."),
+                    category='match',
+                    link_url=url_for('lost_found.item_detail', item_id=cand.id),
+                    dedup_key=f"lf-match-found:{new_item.id}:cand:{cand.id}:u{reporter.id}"
+                )
+
+    return matched_pairs
+
 @lost_found_bp.route('/')
 def index():
     """Module 2: Lost & Found items catalog."""
@@ -39,6 +238,7 @@ def index():
     report_type = request.args.get('type')
     category = request.args.get('category')
     status_f = request.args.get('status')
+    department_f = request.args.get('department')
     search = request.args.get('q', '').strip()
 
     query = LostFoundItem.query.order_by(LostFoundItem.date_time_reported.desc())
@@ -49,6 +249,9 @@ def index():
     if category:
         query = query.filter_by(category=category)
 
+    if department_f:
+        query = query.filter_by(department=department_f)
+
     if status_f in ('open', 'matched', 'claimed', 'closed'):
         query = query.filter_by(status=status_f)
 
@@ -56,7 +259,8 @@ def index():
         query = query.filter(
             (LostFoundItem.title.ilike(f"%{search}%")) |
             (LostFoundItem.description.ilike(f"%{search}%")) |
-            (LostFoundItem.location_reported.ilike(f"%{search}%"))
+            (LostFoundItem.location_reported.ilike(f"%{search}%")) |
+            (LostFoundItem.color.ilike(f"%{search}%"))
         )
 
     items = query.all()
@@ -67,6 +271,8 @@ def index():
         user=user,
         items=items,
         categories=categories,
+        branches=BRANCH_CHOICES,
+        current_branch=department_f,
         current_type=report_type,
         current_cat=category,
         current_status=status_f,
@@ -77,24 +283,39 @@ def index():
 @login_required
 @restrict_visitors
 def report_item():
-    """Report a lost or found item. Lost reports are broadcast to every registered
-    campus member; a finder later notifies the owner directly from the item page."""
+    """Report a lost or found item. Only targeted notifications are sent to users with potential matches."""
     user = get_current_user()
 
     if request.method == 'POST':
         report_type = request.form.get('report_type')
         title = request.form.get('title', '').strip()
         category = request.form.get('category')
+        department = request.form.get('department', 'CSE').strip()
         location_reported = request.form.get('location_reported', '').strip()
         description = request.form.get('description', '').strip()
-        color_hint = request.form.get('color_hint', '').strip() or None
+        color = request.form.get('color', '').strip() or request.form.get('color_hint', '').strip() or None
         contact_phone = request.form.get('contact_phone', user.phone or '').strip()
+        item_date = request.form.get('item_date', '').strip() or None
+        time_slot = request.form.get('time_slot', '').strip() or 'Morning'
+        identification_marks = request.form.get('identification_marks', '').strip() or None
 
         if not title or not location_reported or not description or report_type not in ['lost', 'found']:
             flash("Please fill in all required fields.", "warning")
             return redirect(url_for('lost_found.report_item'))
 
-        # Optional photograph, stored for human identification only (no AI embedding)
+        # Flexible date parser: DD/MM/YYYY, YYYY-MM-DD, DD-MM-YYYY, etc.
+        if item_date:
+            clean_date = item_date.strip().replace('-', '/').replace('.', '/')
+            parts = clean_date.split('/')
+            if len(parts) == 3:
+                if len(parts[0]) == 4:  # YYYY/MM/DD
+                    item_date = f"{parts[2].zfill(2)}/{parts[1].zfill(2)}/{parts[0]}"
+                else:  # DD/MM/YYYY
+                    item_date = f"{parts[0].zfill(2)}/{parts[1].zfill(2)}/{parts[2]}"
+            else:
+                item_date = clean_date
+
+        # Optional photograph, supporting JPG, PNG, and WEBP
         photo_rel_url = None
         file = request.files.get('photo')
 
@@ -124,10 +345,15 @@ def report_item():
             report_type=report_type,
             title=title,
             category=category,
+            department=department,
             location_reported=location_reported,
             date_time_reported=datetime.utcnow(),
             description=description,
-            color_hint=color_hint,
+            color=color,
+            color_hint=color,
+            item_date=item_date,
+            time_slot=time_slot,
+            identification_marks=identification_marks,
             photo_url=photo_rel_url,
             contact_phone=contact_phone,
             status='open'
@@ -135,47 +361,44 @@ def report_item():
         db.session.add(new_item)
         db.session.flush() # obtain new_item.id
 
-        if report_type == 'lost':
-            # Broadcast to every registered, active, non-visitor campus member
-            # (except the reporter) so the whole community keeps an eye out.
-            audience = User.query.filter(
-                User.is_active.is_(True), User.role != 'visitor').all()
-            for recipient in audience:
-                if recipient.id == user.id:
-                    continue
+        # Targeted notifications only to users with matching items (never broadcast to all students)
+        matches = check_and_notify_matches(new_item, user)
+
+        # Notify the assigned department administrator and Main Admin so they can oversee this item
+        dept_admins = User.query.filter(
+            User.is_active.is_(True),
+            (User.role == 'main_admin') | (
+                (User.admin_scope == 'lost_found') & (
+                    (User.department == department) | (User.department.is_(None))
+                )
+            )
+        ).all()
+        for a in dept_admins:
+            if a.id != user.id:
                 _notify_registered_user(
-                    recipient.id,
-                    title=f"Lost item reported: '{title}'",
-                    message=(f"{user.full_name} reported losing a "
-                             f"'{title}' ({category}) near {location_reported}. "
-                             "Open the report and use 'I found this' to notify the "
-                             "owner directly if you have it."),
-                    category='found',
-                    link_url=url_for('lost_found.item_detail', item_id=new_item.id),
-                    dedup_key=f"lf-lost-broadcast:{new_item.id}:u{recipient.id}")
-            flash("Lost item reported. Every registered campus member has been notified.", "success")
-        else:
-            # A found item is listed publicly; alert the office so it can oversee handover.
-            for admin_id in _admin_ids():
-                _notify_registered_user(
-                    admin_id,
-                    title=f"Found item submitted: '{title}'",
-                    message=(f"{user.full_name} reported finding '{title}' ({category}) near "
-                             f"{location_reported}. It is now listed in the public registry."),
+                    a.id,
+                    title=f"New {report_type.upper()} report in {department}: '{title}'",
+                    message=(f"{user.full_name} reported a {report_type} item '{title}' ({category}) "
+                             f"in {department} department near {location_reported}."),
                     category='admin',
                     link_url=url_for('lost_found.item_detail', item_id=new_item.id),
-                    dedup_key=f"lf-found-submitted:{new_item.id}:u{admin_id}")
-            flash("Found item reported. It is now listed publicly for the owner to find.", "success")
+                    dedup_key=f"lf-dept-report:{new_item.id}:u{a.id}"
+                )
+
+        if matches:
+            flash(f"Report submitted! {len(matches)} potential match(es) found — relevant parties have been notified privately.", "success")
+        else:
+            flash("Report submitted successfully! You will be notified automatically as soon as a potential match is reported.", "success")
 
         AuditLog.log(action='LF_REPORT_SUBMITTED', module='LOST_FOUND', user_id=user.id,
-                     details=f"{report_type.upper()} report '{title}' at {location_reported}.",
+                     details=f"{report_type.upper()} report '{title}' in department {department} at {location_reported}.",
                      ip_address=request.remote_addr)
         db.session.commit()
 
-        return redirect(url_for('lost_found.item_detail', item_id=new_item.id))
+        return redirect(url_for('lost_found.index'))
 
     categories = ['Electronics', 'ID Cards & Docs', 'Books & Stationery', 'Personal Items', 'Valuables', 'Other']
-    return render_template('lost_found/report.html', user=user, categories=categories)
+    return render_template('lost_found/report.html', user=user, categories=categories, branches=BRANCH_CHOICES)
 
 @lost_found_bp.route('/item/<int:item_id>')
 def item_detail(item_id):
@@ -385,7 +608,7 @@ def delete_item(item_id):
 
     is_admin = user.has_module_permission('lost_found', 'reports:delete')
     if not (user.id == item.user_id or is_admin):
-        flash("You can only delete reports that you filed.", "danger")
+        flash("You are not authorized to delete this report. You can only delete reports that you filed.", "danger")
         return redirect(url_for('lost_found.item_detail', item_id=item.id))
 
     if item.status == 'closed' and not is_admin:

@@ -32,7 +32,10 @@ import json
 import logging
 import re
 import time
-import cv2
+try:
+    import cv2
+except Exception:
+    cv2 = None
 import numpy as np
 from dataclasses import dataclass, field
 from datetime import datetime

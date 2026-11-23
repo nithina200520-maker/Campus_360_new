@@ -7,12 +7,18 @@
 
   <div class="d-flex flex-wrap justify-content-between align-items-center mb-4">
     <div>
-      <span class="badge bg-danger px-3 py-1 rounded-pill mb-1">
+      <span class="badge {% if is_main_admin %}bg-danger{% else %}bg-primary{% endif %} px-3 py-1 rounded-pill mb-1">
         <i class="fa-solid fa-user-shield me-1"></i>
-        {% if user.admin_scope == 'lost_found' %}Lost &amp; Found Admin Dashboard{% else %}Main Admin &bull; Lost &amp; Found Command Center{% endif %}
+        {% if is_main_admin %}
+          Main Admin &bull; Full Campus Lost &amp; Found Oversight
+        {% elif assigned_dept %}
+          Appointed {{ assigned_dept }} Administrator
+        {% else %}
+          Lost &amp; Found Administrator
+        {% endif %}
       </span>
       <h2 class="fw-bold text-dark mb-0">Lost &amp; Found Administration</h2>
-      <p class="text-muted small mb-0">Government Engineering College, Mosalehosahalli (Hassan) &mdash; verify reports, resolve ownership claims, update locations, record collection/returns and manage notifications.</p>
+      <p class="text-muted small mb-0">Government Engineering College, Mosalehosahalli (Hassan) &mdash; {% if assigned_dept %}Managing records for <strong>{{ assigned_dept }}</strong> branch.{% else %}Managing campus-wide records across all branches.{% endif %}</p>
     </div>
     <div class="d-flex gap-2 mt-2 mt-md-0">
       <button type="button" class="btn btn-success rounded-pill" data-bs-toggle="modal" data-bs-target="#createReportModal">
@@ -64,10 +70,20 @@
     </div>
   </div>
 
+  {% if is_main_admin %}
+  <div class="d-flex flex-wrap gap-2 mb-3 align-items-center">
+    <span class="small fw-bold text-muted me-1"><i class="fa-solid fa-building me-1"></i>Department / Branch Filter:</span>
+    <a href="{{ url_for('admin.manage_lost_found', status=current_status) }}" class="btn btn-sm {% if not current_branch %}btn-dark fw-bold{% else %}btn-outline-secondary{% endif %} rounded-pill">All Branches</a>
+    {% for b in branches %}
+    <a href="{{ url_for('admin.manage_lost_found', branch=b, status=current_status) }}" class="btn btn-sm {% if current_branch == b %}btn-primary fw-bold{% else %}btn-outline-secondary{% endif %} rounded-pill">{{ b }}</a>
+    {% endfor %}
+  </div>
+  {% endif %}
+
   <ul class="nav nav-pills mb-4 gap-2">
-    <li class="nav-item"><a class="nav-link rounded-pill {% if not current_status %}active fw-bold{% endif %}" href="{{ url_for('admin.manage_lost_found') }}">All Reports</a></li>
+    <li class="nav-item"><a class="nav-link rounded-pill {% if not current_status %}active fw-bold{% endif %}" href="{{ url_for('admin.manage_lost_found', branch=current_branch) }}">All Reports</a></li>
     {% for s in ['open', 'matched', 'claimed', 'closed'] %}
-    <li class="nav-item"><a class="nav-link rounded-pill text-capitalize {% if current_status == s %}active fw-bold{% endif %}" href="{{ url_for('admin.manage_lost_found', status=s) }}">{{ s }}</a></li>
+    <li class="nav-item"><a class="nav-link rounded-pill text-capitalize {% if current_status == s %}active fw-bold{% endif %}" href="{{ url_for('admin.manage_lost_found', status=s, branch=current_branch) }}">{{ s }}</a></li>
     {% endfor %}
   </ul>
 
@@ -95,7 +111,7 @@
               </td>
               <td>
                 <a href="{{ url_for('lost_found.item_detail', item_id=c.item_id) }}" class="fw-bold text-dark text-decoration-none">{{ c.item.title if c.item else 'Item #'+ (c.item_id|string) }}</a>
-                <div class="text-muted" style="font-size:0.72rem;">{{ c.item.report_type.upper() if c.item else '' }} &bull; reporter: {{ c.item.reporter.full_name if (c.item and c.item.reporter) else '-' }}</div>
+                <div class="text-muted" style="font-size:0.72rem;"><span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25">{{ c.item.department if c.item else '' }}</span> {{ c.item.report_type.upper() if c.item else '' }} &bull; reporter: {{ c.item.reporter.full_name if (c.item and c.item.reporter) else '-' }}</div>
               </td>
               <td class="small text-secondary" style="max-width:340px;">{{ c.proof_statement }}</td>
               <td class="pe-4 text-end" style="min-width: 300px;">
@@ -124,6 +140,7 @@
           <thead class="table-light">
             <tr>
               <th class="ps-4">Item / Type</th>
+              <th>Branch</th>
               <th>Status</th>
               <th>Reported Location</th>
               <th>Owner</th>
@@ -141,6 +158,11 @@
                     <div><span class="badge {% if item.report_type == 'lost' %}bg-danger{% else %}bg-success{% endif %} text-uppercase" style="font-size:0.62rem;">{{ item.report_type }}</span> <span class="text-muted" style="font-size:0.7rem;">{{ item.category }}</span></div>
                   </div>
                 </div>
+              </td>
+              <td class="small">
+                <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25">{{ item.department }}</span>
+                {% if item.color or item.color_hint %}<div class="text-muted" style="font-size:0.7rem;"><i class="fa-solid fa-palette me-1"></i>{{ item.color or item.color_hint }}</div>{% endif %}
+                {% if item.item_date %}<div class="text-muted" style="font-size:0.7rem;"><i class="fa-solid fa-calendar me-1"></i>{{ item.item_date }} ({{ item.time_slot }})</div>{% endif %}
               </td>
               <td>
                 <span class="badge {% if item.status == 'closed' %}bg-primary{% elif item.status == 'claimed' %}bg-warning text-dark{% elif item.status == 'matched' %}bg-info text-dark{% else %}bg-secondary{% endif %} text-uppercase" style="font-size:0.68rem;">{{ item.status }}</span>
@@ -167,6 +189,11 @@
                     data-action="{{ url_for('admin.lf_edit_item', item_id=item.id) }}"
                     data-title="{{ item.title }}"
                     data-category="{{ item.category }}"
+                    data-department="{{ item.department }}"
+                    data-color="{{ item.color or item.color_hint or '' }}"
+                    data-date="{{ item.item_date or '' }}"
+                    data-timeslot="{{ item.time_slot or 'Morning' }}"
+                    data-marks="{{ item.identification_marks or '' }}"
                     data-location="{{ item.location_reported }}"
                     data-description="{{ item.description }}"
                     data-contact="{{ item.contact_phone or '' }}"
@@ -269,17 +296,62 @@
               {% endfor %}
             </select>
           </div>
-          <div class="col-md-6">
+          <div class="col-md-4">
+            <label class="form-label fw-bold">Department / Branch</label>
+            {% if is_main_admin %}
+            <select name="department" class="form-select" required>
+              {% for b in branches %}
+              <option value="{{ b }}">{{ b }}</option>
+              {% endfor %}
+            </select>
+            {% else %}
+            <input type="text" class="form-control" value="{{ assigned_dept or 'Other' }}" readonly>
+            <input type="hidden" name="department" value="{{ assigned_dept or 'Other' }}">
+            {% endif %}
+          </div>
+          <div class="col-md-4">
             <label class="form-label fw-bold">Item name</label>
             <input name="title" class="form-control" maxlength="150" required>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label fw-bold">Item Colour</label>
+            <input name="color" class="form-control" placeholder="e.g. Black" required>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label fw-bold">Date (DD/MM/YYYY)</label>
+            <div class="input-group">
+              <input name="item_date" id="adminCreateDateInput" class="form-control" placeholder="DD/MM/YYYY" pattern="^(0[1-9]|[12][0-9]|3[01])/(0[1-9]|1[0-2])/\d{4}$" required>
+              <div class="position-relative d-inline-flex">
+                <button class="btn btn-outline-secondary rounded-end rounded-start-0 px-2 d-flex align-items-center justify-content-center h-100" type="button" tabindex="-1">
+                  <i class="fa-solid fa-calendar-day"></i>
+                </button>
+                <input type="date" tabindex="-1" style="position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; z-index: 5;"
+                       onfocus="syncDateToTarget(this, 'adminCreateDateInput')"
+                       onmousedown="syncDateToTarget(this, 'adminCreateDateInput')"
+                       onclick="syncDateToTarget(this, 'adminCreateDateInput'); try { this.showPicker(); } catch(e) {}"
+                       onchange="syncPickerToTarget(this, 'adminCreateDateInput')">
+              </div>
+            </div>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label fw-bold">Time Slot</label>
+            <select name="time_slot" class="form-select" required>
+              <option value="Morning">Morning</option>
+              <option value="Afternoon">Afternoon</option>
+              <option value="Night">Night</option>
+            </select>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label fw-bold">Contact phone</label>
+            <input name="contact_phone" class="form-control" maxlength="20">
           </div>
           <div class="col-md-6">
             <label class="form-label fw-bold">Reported location</label>
             <input name="location_reported" class="form-control" maxlength="150" required>
           </div>
           <div class="col-md-6">
-            <label class="form-label fw-bold">Contact phone</label>
-            <input name="contact_phone" class="form-control" maxlength="20">
+            <label class="form-label fw-bold">Identification Marks</label>
+            <input name="identification_marks" class="form-control" placeholder="e.g. Scratches, damage, stickers, unique marks">
           </div>
           <div class="col-12">
             <label class="form-label fw-bold">Description</label>
@@ -317,13 +389,55 @@
               {% endfor %}
             </select>
           </div>
-          <div class="col-md-6">
+          {% if is_main_admin %}
+          <div class="col-md-4">
+            <label class="form-label fw-bold">Department / Branch</label>
+            <select name="department" id="editReportDepartment" class="form-select">
+              {% for b in branches %}
+              <option value="{{ b }}">{{ b }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          {% endif %}
+          <div class="col-md-4">
+            <label class="form-label fw-bold">Item Colour</label>
+            <input name="color" id="editReportColor" class="form-control" placeholder="e.g. Black">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label fw-bold">Date (DD/MM/YYYY)</label>
+            <div class="input-group">
+              <input name="item_date" id="editReportDate" class="form-control" placeholder="DD/MM/YYYY">
+              <div class="position-relative d-inline-flex">
+                <button class="btn btn-outline-secondary rounded-end rounded-start-0 px-2 d-flex align-items-center justify-content-center h-100" type="button" tabindex="-1">
+                  <i class="fa-solid fa-calendar-day"></i>
+                </button>
+                <input type="date" tabindex="-1" style="position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; z-index: 5;"
+                       onfocus="syncDateToTarget(this, 'editReportDate')"
+                       onmousedown="syncDateToTarget(this, 'editReportDate')"
+                       onclick="syncDateToTarget(this, 'editReportDate'); try { this.showPicker(); } catch(e) {}"
+                       onchange="syncPickerToTarget(this, 'editReportDate')">
+              </div>
+            </div>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label fw-bold">Time Slot</label>
+            <select name="time_slot" id="editReportTimeSlot" class="form-select">
+              <option value="Morning">Morning</option>
+              <option value="Afternoon">Afternoon</option>
+              <option value="Night">Night</option>
+            </select>
+          </div>
+          <div class="col-md-4">
             <label class="form-label fw-bold">Reported location</label>
             <input name="location_reported" id="editReportLocation" class="form-control" maxlength="150" required>
           </div>
-          <div class="col-md-6">
+          <div class="col-md-4">
             <label class="form-label fw-bold">Contact phone</label>
             <input name="contact_phone" id="editReportContact" class="form-control" maxlength="20">
+          </div>
+          <div class="col-12">
+            <label class="form-label fw-bold">Identification Marks</label>
+            <input name="identification_marks" id="editReportMarks" class="form-control" placeholder="Scratches, damage, stickers, unique marks">
           </div>
           <div class="col-12">
             <label class="form-label fw-bold">Description</label>
@@ -379,6 +493,21 @@
         document.getElementById('editReportLocation').value = button.dataset.location;
         document.getElementById('editReportDescription').value = button.dataset.description;
         document.getElementById('editReportContact').value = button.dataset.contact;
+        if (document.getElementById('editReportDepartment') && button.dataset.department) {
+          document.getElementById('editReportDepartment').value = button.dataset.department;
+        }
+        if (document.getElementById('editReportColor')) {
+          document.getElementById('editReportColor').value = button.dataset.color || '';
+        }
+        if (document.getElementById('editReportDate')) {
+          document.getElementById('editReportDate').value = button.dataset.date || '';
+        }
+        if (document.getElementById('editReportTimeSlot') && button.dataset.timeslot) {
+          document.getElementById('editReportTimeSlot').value = button.dataset.timeslot;
+        }
+        if (document.getElementById('editReportMarks')) {
+          document.getElementById('editReportMarks').value = button.dataset.marks || '';
+        }
       });
     }
 
@@ -393,5 +522,26 @@
       });
     }
   })();
+
+  function syncDateToTarget(picker, inputId) {
+    var input = document.getElementById(inputId);
+    if (!input || !picker) return;
+    var cur = input.value.trim();
+    var match = cur.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (match) {
+      picker.value = match[3] + '-' + match[2].padStart(2, '0') + '-' + match[1].padStart(2, '0');
+    }
+  }
+
+  function syncPickerToTarget(picker, inputId) {
+    var input = document.getElementById(inputId);
+    if (!input || !picker || !picker.value) return;
+    var parts = picker.value.split('-');
+    if (parts.length === 3) {
+      input.value = parts[2] + '/' + parts[1] + '/' + parts[0];
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+  }
 </script>
 {% endblock %}

@@ -331,6 +331,9 @@ def change_user_admin_scope(user_id):
     previous_scope = target_user.admin_scope
     seed_default_modules()
     target_user.admin_scope = scope or None
+    dept_choice = request.form.get('department', '').strip()
+    if scope == 'lost_found' and dept_choice:
+        target_user.department = dept_choice
     if previous_scope and previous_scope != scope:
         previous_module = AdminModule.query.filter_by(key=previous_scope).first()
         if previous_module:
@@ -855,28 +858,62 @@ def import_navigation_data(kind=None):
 @admin_bp.route('/lost-found')
 @module_permission_required('lost_found', 'reports:view')
 def manage_lost_found():
-    """Main Admin Lost & Found command center: reports, claims queue, notification history."""
+    """Main Admin & Department Admin Lost & Found command center: reports, claims queue, notification history."""
     user = get_current_user()
     status_f = request.args.get('status')
+    branch_f = request.args.get('branch')
+
     query = LostFoundItem.query.order_by(LostFoundItem.date_time_reported.desc())
     if status_f in ('open', 'matched', 'claimed', 'closed'):
         query = query.filter_by(status=status_f)
+
+    is_main_admin = (getattr(user, 'role', '') == 'main_admin')
+    assigned_dept = None
+    if not is_main_admin and user.is_lost_found_admin():
+        # Department administrator: strictly restricted to their assigned department
+        assigned_dept = getattr(user, 'department', '')
+        if assigned_dept:
+            query = query.filter(LostFoundItem.department.ilike(assigned_dept.strip()))
+    elif is_main_admin and branch_f:
+        query = query.filter(LostFoundItem.department.ilike(branch_f.strip()))
+
     items = query.all()
-    pending_claims = LostFoundClaim.query.filter_by(status='pending').order_by(LostFoundClaim.created_at.desc()).all()
+
+    all_pending_claims = LostFoundClaim.query.filter_by(status='pending').order_by(LostFoundClaim.created_at.desc()).all()
+    if not is_main_admin and assigned_dept:
+        pending_claims = [c for c in all_pending_claims if c.item and (c.item.department or '').strip().upper() == assigned_dept.strip().upper()]
+    elif is_main_admin and branch_f:
+        pending_claims = [c for c in all_pending_claims if c.item and (c.item.department or '').strip().upper() == branch_f.strip().upper()]
+    else:
+        pending_claims = all_pending_claims
+
+    # Department-scoped stats
+    base_stats = LostFoundItem.query
+    if not is_main_admin and assigned_dept:
+        base_stats = base_stats.filter(LostFoundItem.department.ilike(assigned_dept.strip()))
+    elif is_main_admin and branch_f:
+        base_stats = base_stats.filter(LostFoundItem.department.ilike(branch_f.strip()))
+
+    stats = {
+        'open': base_stats.filter_by(status='open').count(),
+        'claimed': base_stats.filter_by(status='claimed').count(),
+        'returned': base_stats.filter_by(status='closed').count(),
+        'pending_claims': len(pending_claims),
+        'duplicate_reports': base_stats.filter_by(is_duplicate=True).count(),
+    }
+
     recent_notifications = Notification.query.order_by(Notification.created_at.desc()).limit(60).all()
     reporters = User.query.filter(
         User.is_active.is_(True), User.role.in_(('student', 'teacher'))
     ).order_by(User.full_name.asc()).all()
-    stats = {
-        'open': LostFoundItem.query.filter_by(status='open').count(),
-        'claimed': LostFoundItem.query.filter_by(status='claimed').count(),
-        'returned': LostFoundItem.query.filter_by(status='closed').count(),
-        'pending_claims': len(pending_claims),
-        'duplicate_reports': LostFoundItem.query.filter_by(is_duplicate=True).count(),
-    }
+
+    branches = ['CSE', 'ECE', 'EEE', 'Civil', 'Mechanical', 'AIML', 'ISE', 'Other']
+
     return render_template('admin/lost_found.html', user=user, items=items,
                            pending_claims=pending_claims, notifications=recent_notifications,
-                           reporters=reporters, stats=stats, current_status=status_f)
+                           reporters=reporters, stats=stats, current_status=status_f,
+                           branches=branches, current_branch=branch_f,
+                           is_main_admin=is_main_admin, assigned_dept=assigned_dept)
 
 @admin_bp.route('/lost-found/item/create', methods=['POST'])
 @module_permission_required('lost_found', 'reports:edit')
@@ -894,6 +931,17 @@ def lf_create_item():
     category = request.form.get('category', '').strip()
     location = request.form.get('location_reported', '').strip()
     description = request.form.get('description', '').strip()
+    color = request.form.get('color', '').strip() or None
+    item_date = request.form.get('item_date', '').strip() or None
+    time_slot = request.form.get('time_slot', 'Morning').strip()
+    identification_marks = request.form.get('identification_marks', '').strip() or None
+
+    is_main_admin = (getattr(admin, 'role', '') == 'main_admin')
+    if not is_main_admin and admin.department:
+        department = admin.department
+    else:
+        department = request.form.get('department', 'CSE').strip()
+
     valid_categories = {
         'Electronics', 'ID Cards & Docs', 'Books & Stationery',
         'Personal Items', 'Valuables', 'Other'
@@ -914,6 +962,12 @@ def lf_create_item():
         report_type=report_type,
         title=title,
         category=category,
+        department=department,
+        color=color,
+        color_hint=color,
+        item_date=item_date,
+        time_slot=time_slot,
+        identification_marks=identification_marks,
         location_reported=location,
         description=description,
         contact_phone=request.form.get('contact_phone', '').strip() or reporter.phone,
@@ -926,10 +980,10 @@ def lf_create_item():
         action='LF_ADMIN_REPORT_CREATED',
         module='LOST_FOUND',
         user_id=admin.id,
-        details=f"{admin.full_name} created a {report_type.upper()} report '{title}' for {reporter.email}.",
+        details=f"{admin.full_name} created a {report_type.upper()} report '{title}' for {reporter.email} in {department}.",
         ip_address=request.remote_addr
     )
-    flash(f"Lost & Found report '{title}' created.", "success")
+    flash(f"Lost & Found report '{title}' created in {department}.", "success")
     return redirect(url_for('admin.manage_lost_found'))
 
 @admin_bp.route('/lost-found/item/<int:item_id>/edit', methods=['POST'])
@@ -938,6 +992,13 @@ def lf_edit_item(item_id):
     """Update descriptive Lost & Found record information."""
     admin = get_current_user()
     item = LostFoundItem.query.get_or_404(item_id)
+
+    # Department RBAC enforcement
+    if admin.role != 'main_admin' and admin.department:
+        if (admin.department or '').strip().upper() != (item.department or '').strip().upper():
+            flash("Access denied: You can only edit records assigned to your department.", "danger")
+            return redirect(url_for('admin.manage_lost_found'))
+
     title = request.form.get('title', '').strip()
     category = request.form.get('category', '').strip()
     location = request.form.get('location_reported', '').strip()
@@ -956,6 +1017,18 @@ def lf_edit_item(item_id):
     item.location_reported = location
     item.description = description
     item.contact_phone = request.form.get('contact_phone', '').strip() or None
+    if request.form.get('color'):
+        item.color = request.form.get('color').strip()
+        item.color_hint = item.color
+    if request.form.get('item_date'):
+        item.item_date = request.form.get('item_date').strip()
+    if request.form.get('time_slot'):
+        item.time_slot = request.form.get('time_slot').strip()
+    if 'identification_marks' in request.form:
+        item.identification_marks = request.form.get('identification_marks').strip() or None
+    if admin.role == 'main_admin' and request.form.get('department'):
+        item.department = request.form.get('department').strip()
+
     db.session.commit()
     AuditLog.log(
         action='LF_ADMIN_REPORT_UPDATED',
@@ -972,6 +1045,13 @@ def lf_edit_item(item_id):
 def lf_update_location(item_id):
     user = get_current_user()
     item = LostFoundItem.query.get_or_404(item_id)
+
+    # Department RBAC enforcement
+    if user.role != 'main_admin' and user.department:
+        if (user.department or '').strip().upper() != (item.department or '').strip().upper():
+            flash("Access denied: You can only manage records assigned to your department.", "danger")
+            return redirect(url_for('admin.manage_lost_found'))
+
     new_location = request.form.get('location_reported', '').strip()
     if not new_location:
         flash("New location is required.", "danger")
@@ -993,6 +1073,13 @@ def lf_verify_item(item_id):
     """Authorized verification that a found item is genuine and in campus custody."""
     user = get_current_user()
     item = LostFoundItem.query.get_or_404(item_id)
+
+    # Department RBAC enforcement
+    if user.role != 'main_admin' and user.department:
+        if (user.department or '').strip().upper() != (item.department or '').strip().upper():
+            flash("Access denied: You can only verify records assigned to your department.", "danger")
+            return redirect(url_for('admin.manage_lost_found'))
+
     item.verified_by_admin_id = user.id
     if item.status == 'open':
         item.status = 'matched'
@@ -1015,9 +1102,15 @@ def lf_claim_decision(claim_id):
         flash("This claim was already decided.", "info")
         return redirect(url_for('admin.manage_lost_found'))
 
+    item = claim.item
+    # Department RBAC enforcement
+    if user.role != 'main_admin' and user.department:
+        if item and (user.department or '').strip().upper() != (item.department or '').strip().upper():
+            flash("Access denied: You can only decide claims for records assigned to your department.", "danger")
+            return redirect(url_for('admin.manage_lost_found'))
+
     decision = request.form.get('decision')  # 'approve' | 'reject'
     note = request.form.get('decision_note', '').strip()
-    item = claim.item
     claim.decided_by_admin_id = user.id
     claim.decision_note = note or None
     claim.decided_at = datetime.utcnow()
@@ -1056,6 +1149,13 @@ def lf_record_return(item_id):
     """Track the physical handover: mark item collected and returned to its owner."""
     user = get_current_user()
     item = LostFoundItem.query.get_or_404(item_id)
+
+    # Department RBAC enforcement
+    if user.role != 'main_admin' and user.department:
+        if (user.department or '').strip().upper() != (item.department or '').strip().upper():
+            flash("Access denied: You can only record returns for records assigned to your department.", "danger")
+            return redirect(url_for('admin.manage_lost_found'))
+
     note = request.form.get('handover_note', '').strip()
 
     if not item.claimed_by_user_id:

@@ -12,6 +12,14 @@ export default defineConfig({
     host: '0.0.0.0',
     port: vitePort,
     proxy: {
+      '/auth': {
+        target: flaskApiTarget,
+        changeOrigin: true
+      },
+      '/canteen': {
+        target: flaskApiTarget,
+        changeOrigin: true
+      },
       '/api/campus-admin': {
         target: flaskApiTarget,
         changeOrigin: true

@@ -40,61 +40,116 @@ def _mk_item(db, owner, report_type, title, category="Electronics",
     return item
 
 
-def _lost_form(title="My Casio Calculator"):
+def _lost_form(title="My Casio Calculator", department="CSE", color="Black",
+               item_date="15/11/2026", time_slot="Morning", identification_marks="Yellow sticker"):
     return {
-        "report_type": "lost", "title": title, "category": "Electronics",
+        "report_type": "lost",
+        "title": title,
+        "category": "Electronics",
+        "department": department,
+        "color": color,
         "location_reported": "Central Library",
         "description": "Black scientific calculator with a yellow sticker",
-        "color_hint": "Black", "contact_phone": "+91 98450 44004",
+        "item_date": item_date,
+        "time_slot": time_slot,
+        "identification_marks": identification_marks,
+        "contact_phone": "+91 98450 44004",
     }
 
 
 # --------------------------------------------------------------------------
-# 1. Reporting + the broadcast / finder notification flow (no AI matching)
+# 1. Reporting + Targeted Notification & Matching Flow (No whole-campus broadcasts)
 # --------------------------------------------------------------------------
 class TestReportAndNotify:
-    def test_lost_report_broadcasts_to_all_registered_members(self, client, db, users):
+    def test_lost_report_saves_all_11_fields_and_never_broadcasts(self, client, db, users):
         login(client, "student@gechassan.ac.in")
         resp = client.post("/lost-found/report", data=_lost_form(), follow_redirects=False)
         assert resp.status_code == 302
 
         item = LostFoundItem.query.filter_by(title="My Casio Calculator").one()
         assert item.report_type == "lost" and item.status == "open"
+        assert item.department == "CSE"
+        assert item.color == "Black"
+        assert item.item_date == "15/11/2026"
+        assert item.time_slot == "Morning"
+        assert item.identification_marks == "Yellow sticker"
 
-        # every active, non-visitor account EXCEPT the reporter receives the alert
-        expected = {users["main_admin"].id, users["canteen_admin"].id,
-                    users["teacher_verified"].id, users["teacher_pending"].id}
-        recipients = {n.user_id for n in Notification.query.filter_by(category="found").all()}
-        assert recipients == expected
-        # the reporter is not alerted about their own loss; visitors/inactive are never spammed
-        assert users["student"].id not in recipients
-        assert users["visitor"].id not in recipients
-        assert users["inactive"].id not in recipients
-        for note in Notification.query.filter_by(category="found").all():
-            assert "I found this" in note.message
+        # Crucial requirement: NEVER broadcast notifications to all students
+        found_broadcasts = Notification.query.filter_by(category="found").all()
+        assert len(found_broadcasts) == 0
+
+    def test_potential_match_notifies_only_relevant_users(self, client, db, users):
+        # Teacher reports a FOUND Casio Calculator in Electronics
+        teacher = users["teacher_verified"]
+        found = LostFoundItem(
+            user_id=teacher.id,
+            report_type="found",
+            title="Casio Calculator FX991",
+            category="Electronics",
+            department="CSE",
+            color="Black",
+            location_reported="Central Library",
+            description="Found a scientific calculator with yellow sticker on floor 2",
+            date_time_reported=datetime.utcnow(),
+            status="open"
+        )
+        db.session.add(found)
+        db.session.commit()
+
+        # Student reports a LOST Casio Calculator matching category, title, colour, desc, location
+        login(client, "student@gechassan.ac.in")
+        resp = client.post("/lost-found/report", data=_lost_form(), follow_redirects=False)
+        assert resp.status_code == 302
+
+        # Verify that ONLY the relevant parties (finder and loser) receive match notification
+        student_matches = Notification.query.filter_by(user_id=users["student"].id, category="match").all()
+        teacher_matches = Notification.query.filter_by(user_id=teacher.id, category="match").all()
+        assert len(student_matches) == 1
+        assert len(teacher_matches) == 1
+        # Unrelated student/canteen admin receives NO match notification
+        unrelated_matches = Notification.query.filter_by(user_id=users["canteen_admin"].id, category="match").all()
+        assert len(unrelated_matches) == 0
 
     def test_found_report_lists_publicly_and_alerts_admin_only(self, client, db, users):
         login(client, "teacher@gechassan.ac.in")
         resp = client.post("/lost-found/report", data={
             "report_type": "found", "title": "Found Water Bottle", "category": "Personal Items",
+            "department": "Civil", "color": "Blue", "item_date": "16/11/2026", "time_slot": "Morning",
             "location_reported": "Canteen", "description": "Blue steel bottle on a bench",
-            "color_hint": "Blue", "contact_phone": "+91 98450 00000",
+            "contact_phone": "+91 98450 00000",
         }, follow_redirects=False)
         assert resp.status_code == 302
 
         admins = Notification.query.filter_by(category="admin").all()
-        assert admins and all(a.user_id == users["main_admin"].id for a in admins)
+        assert admins and any(a.user_id == users["main_admin"].id for a in admins)
         # a found report is NOT broadcast to the whole campus
         assert Notification.query.filter_by(category="found").count() == 0
         # an unrelated student gets nothing
         assert Notification.query.filter_by(user_id=users["student"].id).count() == 0
 
-    def test_no_ai_match_rows_are_created(self, client, db, users):
+    def test_matching_system_pairs_potential_matches(self, client, db, users):
+        teacher = users["teacher_verified"]
+        found = LostFoundItem(
+            user_id=teacher.id,
+            report_type="found",
+            title="Scientific Calculator",
+            category="Electronics",
+            department="CSE",
+            color="Black",
+            location_reported="Central Library",
+            description="Found a scientific calculator left at library",
+            date_time_reported=datetime.utcnow(),
+            status="open"
+        )
+        db.session.add(found)
+        db.session.commit()
+
         login(client, "student@gechassan.ac.in")
         client.post("/lost-found/report", data=_lost_form())
-        # the AI matcher is gone: nothing pairs reports automatically
         from app.models import LostFoundMatch
-        assert LostFoundMatch.query.count() == 0
+        match = LostFoundMatch.query.filter_by(found_item_id=found.id).first()
+        assert match is not None
+        assert match.status == 'suggested'
 
     def test_finder_notifies_owner_with_public_contact(self, client, db, users):
         owner = users["student"]
@@ -259,8 +314,87 @@ class TestAdminControls:
         assert resp.status_code == 200
         body = resp.get_data(as_text=True)
         assert "Lost &amp; Found Administration" in body
-        assert "AI" not in body                      # every AI surface is gone
+        assert "/admin/ai-lab" not in body
         assert client.get("/admin/ai-lab").status_code == 404
+
+    def test_student_cannot_delete_other_students_report(self, client, db, users):
+        student_a = users["student"]
+        lost_item = _mk_item(db, student_a, "lost", "Student A Laptop")
+
+        # Log in as a different student/user
+        login(client, "pending.teacher@gechassan.ac.in")
+        resp = client.post(f"/lost-found/item/{lost_item.id}/delete", follow_redirects=True)
+        assert "You are not authorized to delete this report" in resp.get_data(as_text=True)
+        assert LostFoundItem.query.get(lost_item.id) is not None
+
+    def test_department_admin_permissions_and_scoping(self, client, db, users):
+        # Main Admin appoints teacher as Lost & Found Admin for CSE
+        login(client, "admin@gechassan.ac.in")
+        teacher = users["teacher_verified"]
+        resp = client.post(f"/admin/users/{teacher.id}/admin-scope", data={
+            "admin_scope": "lost_found",
+            "department": "CSE"
+        }, follow_redirects=True)
+        assert resp.status_code == 200
+
+        db.session.refresh(teacher)
+        assert teacher.admin_scope == "lost_found"
+        assert teacher.department == "CSE"
+
+        # Create an item in CSE and an item in Civil
+        cse_item = LostFoundItem(
+            user_id=users["student"].id,
+            report_type="found",
+            title="CSE Lab Notebook",
+            category="Books & Stationery",
+            department="CSE",
+            location_reported="CSE Lab",
+            description="Left on lab desk",
+            status="open",
+            date_time_reported=datetime.utcnow()
+        )
+        civil_item = LostFoundItem(
+            user_id=users["student"].id,
+            report_type="found",
+            title="Civil Theodolite Cover",
+            category="Other",
+            department="Civil",
+            location_reported="Survey Store",
+            description="Cover found",
+            status="open",
+            date_time_reported=datetime.utcnow()
+        )
+        db.session.add_all([cse_item, civil_item])
+        db.session.commit()
+
+        # Login as CSE Department Admin
+        client.get("/auth/logout")
+        login(client, "teacher@gechassan.ac.in")
+
+        # Department admin can view their dashboard and see CSE item
+        view_resp = client.get("/admin/lost-found")
+        assert view_resp.status_code == 200
+        content = view_resp.get_data(as_text=True)
+        assert "CSE Lab Notebook" in content
+        assert "Civil Theodolite Cover" not in content
+
+        # Department admin cannot edit Civil item
+        edit_resp = client.post(f"/admin/lost-found/item/{civil_item.id}/edit", data={
+            "title": "Hacked Civil Item",
+            "category": "Other",
+            "location_reported": "Survey Store",
+            "description": "Modified by unauthorized dept admin"
+        }, follow_redirects=True)
+        assert "Access denied: You can only edit records assigned to your department" in edit_resp.get_data(as_text=True)
+        db.session.refresh(civil_item)
+        assert civil_item.title == "Civil Theodolite Cover"
+
+        # Main Admin has full access to both
+        client.get("/auth/logout")
+        login(client, "admin@gechassan.ac.in")
+        main_view = client.get("/admin/lost-found").get_data(as_text=True)
+        assert "CSE Lab Notebook" in main_view
+        assert "Civil Theodolite Cover" in main_view
 
     def test_admin_update_location_notifies_reporter(self, client, db, users):
         found = _mk_item(db, users["teacher_verified"], "found", "Found Calculator")

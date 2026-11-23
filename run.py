@@ -124,7 +124,7 @@ def main():
     flask_proc = subprocess.Popen(
         [
             sys.executable, "-m", "flask", "--app", "app:create_app",
-            "run", "--no-reload", "--host", "0.0.0.0", "--port", flask_port
+            "run", "--reload", "--host", "0.0.0.0", "--port", flask_port
         ],
         cwd=PROJECT_ROOT,
         stdout=subprocess.PIPE,

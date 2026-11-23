@@ -1,16 +1,150 @@
-import React, { useState } from 'react';
-import { Compass, Box, UtensilsCrossed, Bell, User, LogOut, Shield, ChevronRight, ArrowLeft, LayoutDashboard, Briefcase, X, CheckCircle2, MapPin } from 'lucide-react';
+import React, { useState, useRef } from 'react';
+import { Compass, Box, UtensilsCrossed, Bell, User, LogOut, Shield, ChevronRight, ArrowLeft, LayoutDashboard, Briefcase, X, CheckCircle2, MapPin, Trash2 } from 'lucide-react';
+
+const INITIAL_NOTIFICATIONS = [
+  { id: 1, title: 'VTU Exam Schedule Announced', body: '5th & 7th semester theoretical examinations commence Dec 18.', time: '10m ago' },
+  { id: 2, title: 'Smart Canteen NFC Priority Active', body: 'Fast-track counter 2 open for online orders.', time: '1h ago' },
+  { id: 3, title: 'Annual AI & IoT Hackathon 2026', body: 'Registration open for 36-hour sprint at CSE Block.', time: '3h ago' }
+];
+
+function SwipeableNotificationItem({ notification, onDelete }) {
+  const [offsetX, setOffsetX] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
+  const [isRemoving, setIsRemoving] = useState(false);
+  const dragRef = useRef({ startX: 0, startY: 0, isDragging: false, lock: null });
+
+  const THRESHOLD = 60; // Pixels to drag left before committing to delete
+  const MAX_REVEAL = 85;
+
+  const handlePointerDown = (e) => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    dragRef.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      isDragging: true,
+      lock: null,
+    };
+  };
+
+  const handlePointerMove = (e) => {
+    if (!dragRef.current.isDragging) return;
+    const dx = e.clientX - dragRef.current.startX;
+    const dy = e.clientY - dragRef.current.startY;
+
+    if (!dragRef.current.lock) {
+      if (Math.abs(dx) < 6 && Math.abs(dy) < 6) return;
+      if (Math.abs(dy) > Math.abs(dx)) {
+        // Vertical scroll - disengage horizontal swipe
+        dragRef.current.isDragging = false;
+        setIsDragging(false);
+        setOffsetX(0);
+        return;
+      }
+      dragRef.current.lock = 'h';
+      setIsDragging(true);
+    }
+
+    if (dragRef.current.lock === 'h') {
+      // Allow dragging left only (negative values)
+      const clamped = Math.min(0, Math.max(-MAX_REVEAL - 25, dx));
+      setOffsetX(clamped);
+    }
+  };
+
+  const executeDelete = () => {
+    setIsRemoving(true);
+    setOffsetX(-350);
+    setTimeout(() => {
+      onDelete(notification.id);
+    }, 220);
+  };
+
+  const handlePointerEnd = () => {
+    if (!dragRef.current.isDragging) return;
+    dragRef.current.isDragging = false;
+    setIsDragging(false);
+
+    if (offsetX <= -THRESHOLD) {
+      executeDelete();
+    } else {
+      setOffsetX(0);
+    }
+  };
+
+  return (
+    <div
+      className={`relative overflow-hidden rounded-xl transition-all duration-200 select-none ${
+        isRemoving ? 'max-h-0 opacity-0 my-0 py-0' : 'max-h-28 opacity-100'
+      }`}
+      style={{ touchAction: 'pan-y' }}
+    >
+      {/* Background Revealed Red Delete Action */}
+      <div
+        onClick={executeDelete}
+        className="absolute inset-y-0 right-0 w-[85px] bg-gradient-to-l from-rose-600 to-rose-700 flex items-center justify-center gap-1.5 text-white font-bold text-xs cursor-pointer hover:bg-rose-500 transition-colors z-0"
+        title="Delete Notification"
+      >
+        <Trash2 className="w-3.5 h-3.5 text-white" />
+        <span className="text-[10px] font-bold uppercase tracking-wider">Delete</span>
+      </div>
+
+      {/* Front Card that translates on swipe */}
+      <div
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerEnd}
+        onPointerCancel={handlePointerEnd}
+        style={{
+          transform: `translateX(${offsetX}px)`,
+          transition: isDragging ? 'none' : 'transform 0.2s cubic-bezier(0.2, 0.9, 0.3, 1)',
+        }}
+        className="relative z-10 p-2.5 rounded-xl bg-[#040e22] border border-cyan-500/20 hover:border-cyan-400/40 transition-colors cursor-grab active:cursor-grabbing group shadow-sm"
+      >
+        <div className="flex items-center justify-between text-[11px] font-bold text-white mb-0.5">
+          <div className="flex items-center gap-1.5 truncate pr-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 shrink-0 animate-pulse"></span>
+            <span className="truncate">{notification.title}</span>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="text-[9px] text-cyan-400 font-normal">{notification.time}</span>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                executeDelete();
+              }}
+              className="p-1 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded transition-colors"
+              title="Delete Notification"
+            >
+              <Trash2 className="w-3 h-3" />
+            </button>
+          </div>
+        </div>
+        <p className="text-[10px] text-slate-300 leading-relaxed pl-3">{notification.body}</p>
+      </div>
+    </div>
+  );
+}
 
 export default function Navbar({ currentPage, setCurrentPage, currentUser, onLogout, onBack, canGoBack }) {
   const [showNotifications, setShowNotifications] = useState(false);
   const [showCollegeLocation, setShowCollegeLocation] = useState(false);
-  const [unreadCount, setUnreadCount] = useState(3);
+  const [notifications, setNotifications] = useState(INITIAL_NOTIFICATIONS);
+  const [unreadCount, setUnreadCount] = useState(INITIAL_NOTIFICATIONS.length);
 
-  const notifications = [
-    { id: 1, title: 'VTU Exam Schedule Announced', body: '5th & 7th semester theoretical examinations commence Dec 18.', time: '10m ago' },
-    { id: 2, title: 'Smart Canteen NFC Priority Active', body: 'Fast-track counter 2 open for online orders.', time: '1h ago' },
-    { id: 3, title: 'Annual AI & IoT Hackathon 2026', body: 'Registration open for 36-hour sprint at CSE Block.', time: '3h ago' }
-  ];
+  const handleDeleteNotification = (id) => {
+    setNotifications((prev) => prev.filter((n) => n.id !== id));
+    setUnreadCount((prev) => Math.max(0, prev - 1));
+  };
+
+  const handleMarkAllRead = () => {
+    setUnreadCount(0);
+  };
+
+  const handleClearAll = () => {
+    setNotifications([]);
+    setUnreadCount(0);
+  };
   const adminModules = currentUser?.admin_modules || currentUser?.adminModules || [];
   const adminModuleSlugs = adminModules.map((module) => (
     typeof module === 'string' ? module : module.slug || module.module_slug
@@ -240,7 +374,7 @@ export default function Navbar({ currentPage, setCurrentPage, currentUser, onLog
                     <div className="flex items-center gap-2">
                       {unreadCount > 0 && (
                         <button 
-                          onClick={() => setUnreadCount(0)}
+                          onClick={handleMarkAllRead}
                           className="text-[10px] text-cyan-300 hover:underline cursor-pointer"
                         >
                           Mark all read
@@ -255,17 +389,52 @@ export default function Navbar({ currentPage, setCurrentPage, currentUser, onLog
                     </div>
                   </div>
 
-                  <div className="space-y-2.5 max-h-72 overflow-y-auto pr-1">
-                    {notifications.map(n => (
-                      <div key={n.id} className="p-2.5 rounded-xl bg-[#040e22] border border-cyan-500/20 hover:border-cyan-400/40 transition-all">
-                        <div className="flex items-center justify-between text-[11px] font-bold text-white mb-0.5">
-                          <span>{n.title}</span>
-                          <span className="text-[9px] text-cyan-400 font-normal">{n.time}</span>
-                        </div>
-                        <p className="text-[10px] text-slate-300 leading-relaxed">{n.body}</p>
+                  {notifications.length === 0 ? (
+                    <div className="py-6 text-center">
+                      <div className="w-10 h-10 mx-auto rounded-full bg-cyan-500/10 border border-cyan-400/40 flex items-center justify-center text-cyan-300 mb-2">
+                        <CheckCircle2 className="w-5 h-5" />
                       </div>
-                    ))}
-                  </div>
+                      <div className="text-xs font-bold text-white mb-1">All Caught Up!</div>
+                      <p className="text-[10px] text-slate-400 mb-3">You have cleared all campus notifications.</p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setNotifications(INITIAL_NOTIFICATIONS);
+                          setUnreadCount(INITIAL_NOTIFICATIONS.length);
+                        }}
+                        className="text-[10px] px-3 py-1.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-400/40 hover:bg-cyan-500/30 transition-all font-semibold cursor-pointer"
+                      >
+                        Restore Sample Alerts
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="space-y-2.5 max-h-72 overflow-y-auto pr-1">
+                        {notifications.map((n) => (
+                          <SwipeableNotificationItem
+                            key={n.id}
+                            notification={n}
+                            onDelete={handleDeleteNotification}
+                          />
+                        ))}
+                      </div>
+
+                      {/* Swipe-to-delete instruction footer */}
+                      <div className="flex items-center justify-between pt-2.5 mt-2 border-t border-cyan-500/20 text-[10px] text-slate-400">
+                        <div className="flex items-center gap-1.5 text-cyan-400">
+                          <ArrowLeft className="w-3 h-3 animate-pulse" />
+                          <span>Swipe or drag left to delete</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleClearAll}
+                          className="text-rose-400 hover:text-rose-300 hover:underline cursor-pointer font-medium"
+                        >
+                          Clear all
+                        </button>
+                      </div>
+                    </>
+                  )}
                 </div>
               )}
 

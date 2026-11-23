@@ -138,16 +138,27 @@
               </td>
               <td>
                 {% if u.role in ('student', 'teacher') %}
-                <form method="POST" action="{{ url_for('admin.change_user_admin_scope', user_id=u.id) }}" class="d-flex gap-1 align-items-center">
-                  <select name="admin_scope" class="form-select form-select-sm" aria-label="Module admin access for {{ u.full_name }}">
-                    <option value="" {% if not u.admin_scope %}selected{% endif %}>No module admin access</option>
-                    {% if u.role == 'teacher' %}
-                    <option value="lost_found" {% if u.admin_scope == 'lost_found' %}selected{% endif %}>Lost &amp; Found Admin</option>
-                    {% endif %}
-                    <option value="navigation" {% if u.admin_scope == 'navigation' %}selected{% endif %}>College Navigation Admin</option>
-                    <option value="canteen" {% if u.admin_scope == 'canteen' %}selected{% endif %}>Canteen Admin</option>
-                  </select>
-                  <button type="submit" class="btn btn-sm btn-outline-primary">Save</button>
+                <form method="POST" action="{{ url_for('admin.change_user_admin_scope', user_id=u.id) }}" class="d-flex flex-column gap-1">
+                  <div class="d-flex gap-1 align-items-center">
+                    <select name="admin_scope" class="form-select form-select-sm" aria-label="Module admin access for {{ u.full_name }}" onchange="var d=document.getElementById('scope_dept_{{ u.id }}'); if(d){ d.style.display = (this.value==='lost_found' ? 'block' : 'none'); }">
+                      <option value="" {% if not u.admin_scope %}selected{% endif %}>No module admin access</option>
+                      {% if u.role == 'teacher' %}
+                      <option value="lost_found" {% if u.admin_scope == 'lost_found' %}selected{% endif %}>Lost &amp; Found Admin</option>
+                      {% endif %}
+                      <option value="navigation" {% if u.admin_scope == 'navigation' %}selected{% endif %}>College Navigation Admin</option>
+                      <option value="canteen" {% if u.admin_scope == 'canteen' %}selected{% endif %}>Canteen Admin</option>
+                    </select>
+                    <button type="submit" class="btn btn-sm btn-outline-primary">Save</button>
+                  </div>
+                  {% if u.role == 'teacher' %}
+                  <div id="scope_dept_{{ u.id }}" style="display: {% if u.admin_scope == 'lost_found' %}block{% else %}none{% endif %};">
+                    <select name="department" class="form-select form-select-sm text-primary fw-semibold" title="Appoint Branch Administrator">
+                      {% for b in ['CSE', 'ECE', 'EEE', 'Civil', 'Mechanical', 'AIML', 'ISE', 'Other'] %}
+                      <option value="{{ b }}" {% if u.department and (b.lower() in u.department.lower() or u.department.lower() in b.lower()) %}selected{% endif %}>Branch Admin: {{ b }}</option>
+                      {% endfor %}
+                    </select>
+                  </div>
+                  {% endif %}
                 </form>
                 {% else %}
                   <span class="text-muted small">Not eligible</span>
